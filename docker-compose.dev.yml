@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Servidor gRPC en modo desarrollo
+  grpc-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: quetzalship-grpc-dev
+    command: npm run start:dev
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/proto:/app/proto
+    networks:
+      - quetzalship-dev-network
+
+  # Gateway REST en modo desarrollo
+  gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gateway
+      target: builder
+    container_name: quetzalship-gateway-dev
+    command: npm run start:gateway
+    ports:
+      - "3001:3001"
+    environment:
+      - GRPC_URL=grpc-server:50051
+      - GATEWAY_PORT=3001
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/proto:/app/proto
+    depends_on:
+      - grpc-server
+    networks:
+      - quetzalship-dev-network
+
+  # Frontend en modo desarrollo
+  frontend:
+    image: node:20-alpine
+    container_name: quetzalship-frontend-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3001/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - gateway
+    networks:
+      - quetzalship-dev-network
+
+networks:
+  quetzalship-dev-network:
+    driver: bridge

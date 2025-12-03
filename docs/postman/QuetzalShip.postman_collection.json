@@ -1,0 +1,409 @@
+{
+  "info": {
+    "_postman_id": "quetzalship-grpc-collection",
+    "name": "QuetzalShip gRPC",
+    "description": "Colección de pruebas gRPC para el microservicio QuetzalShip",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "CreateOrder",
+      "item": [
+        {
+          "name": "Caso válido 1 - Orden simple METRO STANDARD",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originZone\": 1,\n  \"destinationZone\": 1,\n  \"serviceType\": 1,\n  \"packages\": [\n    {\n      \"weightKg\": 5,\n      \"heightCm\": 30,\n      \"widthCm\": 20,\n      \"lengthCm\": 15,\n      \"fragile\": false,\n      \"declaredValueCents\": 0\n    }\n  ],\n  \"discount\": {\n    \"type\": 1,\n    \"value\": 0\n  },\n  \"insuranceEnabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CreateOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CreateOrder"]
+            },
+            "description": "Crear una orden simple de envío Metro a Metro con servicio Standard"
+          }
+        },
+        {
+          "name": "Caso válido 2 - Orden compleja con seguro y descuento",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originZone\": 1,\n  \"destinationZone\": 3,\n  \"serviceType\": 3,\n  \"packages\": [\n    {\n      \"weightKg\": 10,\n      \"heightCm\": 50,\n      \"widthCm\": 40,\n      \"lengthCm\": 30,\n      \"fragile\": true,\n      \"declaredValueCents\": 100000\n    },\n    {\n      \"weightKg\": 5,\n      \"heightCm\": 25,\n      \"widthCm\": 20,\n      \"lengthCm\": 15,\n      \"fragile\": false,\n      \"declaredValueCents\": 50000\n    }\n  ],\n  \"discount\": {\n    \"type\": 2,\n    \"value\": 15\n  },\n  \"insuranceEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CreateOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CreateOrder"]
+            },
+            "description": "Crear una orden compleja con múltiples paquetes, seguro y descuento"
+          }
+        },
+        {
+          "name": "Caso inválido - Peso cero",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originZone\": 1,\n  \"destinationZone\": 2,\n  \"serviceType\": 1,\n  \"packages\": [\n    {\n      \"weightKg\": 0,\n      \"heightCm\": 30,\n      \"widthCm\": 20,\n      \"lengthCm\": 15,\n      \"fragile\": false,\n      \"declaredValueCents\": 0\n    }\n  ],\n  \"discount\": {\n    \"type\": 1,\n    \"value\": 0\n  },\n  \"insuranceEnabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CreateOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CreateOrder"]
+            },
+            "description": "Error esperado: INVALID_ARGUMENT - Peso debe ser mayor a 0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ListOrders",
+      "item": [
+        {
+          "name": "Caso válido 1 - Listar todas las órdenes",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pageSize\": 10,\n  \"pageToken\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/ListOrders",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "ListOrders"]
+            },
+            "description": "Listar las primeras 10 órdenes"
+          }
+        },
+        {
+          "name": "Caso válido 2 - Paginación con pageSize 5",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pageSize\": 5,\n  \"pageToken\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/ListOrders",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "ListOrders"]
+            },
+            "description": "Listar órdenes con paginación reducida"
+          }
+        },
+        {
+          "name": "Caso inválido - PageSize excede máximo",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pageSize\": 1000,\n  \"pageToken\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/ListOrders",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "ListOrders"]
+            },
+            "description": "PageSize se limita a 100 máximo (no error, pero se limita)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "GetOrder",
+      "item": [
+        {
+          "name": "Caso válido 1 - Obtener orden existente",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetOrder"]
+            },
+            "description": "Obtener detalle de una orden existente (reemplazar {{orderId}} con ID real)"
+          }
+        },
+        {
+          "name": "Caso válido 2 - Obtener orden por ID específico",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"test-order-id\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetOrder"]
+            },
+            "description": "Obtener orden con ID específico"
+          }
+        },
+        {
+          "name": "Caso inválido - Orden no existe",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"non-existent-order-id-12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetOrder"]
+            },
+            "description": "Error esperado: NOT_FOUND - Orden no existe"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CancelOrder",
+      "item": [
+        {
+          "name": "Caso válido 1 - Cancelar orden activa",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CancelOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CancelOrder"]
+            },
+            "description": "Cancelar una orden activa (reemplazar {{orderId}} con ID real)"
+          }
+        },
+        {
+          "name": "Caso válido 2 - Cancelar orden específica",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-to-cancel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CancelOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CancelOrder"]
+            },
+            "description": "Cancelar orden con ID específico"
+          }
+        },
+        {
+          "name": "Caso inválido - Doble cancelación",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{cancelledOrderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/CancelOrder",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "CancelOrder"]
+            },
+            "description": "Error esperado: FAILED_PRECONDITION - Orden ya cancelada"
+          }
+        }
+      ]
+    },
+    {
+      "name": "GetReceipt",
+      "item": [
+        {
+          "name": "Caso válido 1 - Recibo de orden activa",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetReceipt",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetReceipt"]
+            },
+            "description": "Obtener recibo de una orden activa"
+          }
+        },
+        {
+          "name": "Caso válido 2 - Recibo de orden cancelada",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{cancelledOrderId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetReceipt",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetReceipt"]
+            },
+            "description": "Obtener recibo de una orden cancelada (datos congelados)"
+          }
+        },
+        {
+          "name": "Caso inválido - Orden no existe",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-that-does-not-exist\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "grpc://localhost:50051/quetzalship.QuetzalShipService/GetReceipt",
+              "protocol": "grpc",
+              "host": ["localhost"],
+              "port": "50051",
+              "path": ["quetzalship.QuetzalShipService", "GetReceipt"]
+            },
+            "description": "Error esperado: NOT_FOUND - Orden no existe"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "orderId",
+      "value": "REPLACE_WITH_VALID_ORDER_ID",
+      "type": "string",
+      "description": "ID de una orden válida creada"
+    },
+    {
+      "key": "cancelledOrderId",
+      "value": "REPLACE_WITH_CANCELLED_ORDER_ID",
+      "type": "string",
+      "description": "ID de una orden ya cancelada"
+    }
+  ]
+}
