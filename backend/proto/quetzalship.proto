@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package quetzalship;
+
+import "google/protobuf/timestamp.proto";
+
+// Servicio principal de QuetzalShip
+service QuetzalShipService {
+  // Crear una nueva orden de envío
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+
+  // Listar todas las órdenes (con paginación opcional)
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+
+  // Obtener detalle completo de una orden
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+
+  // Cancelar una orden existente
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+
+  // Obtener recibo de una orden
+  rpc GetReceipt(GetReceiptRequest) returns (GetReceiptResponse);
+}
+
+// ============= ENUMS =============
+
+enum Zone {
+  ZONE_UNSPECIFIED = 0;
+  METRO = 1;
+  INTERIOR = 2;
+  FRONTERA = 3;
+}
+
+enum ServiceType {
+  SERVICE_TYPE_UNSPECIFIED = 0;
+  STANDARD = 1;
+  EXPRESS = 2;
+  SAME_DAY = 3;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ACTIVE = 1;
+  CANCELLED = 2;
+}
+
+enum DiscountType {
+  DISCOUNT_TYPE_UNSPECIFIED = 0;
+  NONE = 1;
+  PERCENT = 2;
+  FIXED = 3;
+}
+
+// ============= MENSAJES DE DATOS =============
+
+// Paquete individual dentro de una orden
+message Package {
+  // Peso en kilogramos (debe ser > 0)
+  double weight_kg = 1;
+  // Altura en centímetros (debe ser > 0)
+  double height_cm = 2;
+  // Ancho en centímetros (debe ser > 0)
+  double width_cm = 3;
+  // Largo en centímetros (debe ser > 0)
+  double length_cm = 4;
+  // Indica si el paquete es frágil
+  bool fragile = 5;
+  // Valor declarado en centavos de Quetzal (>= 0)
+  // Usamos centavos para evitar problemas de punto flotante
+  int64 declared_value_cents = 6;
+}
+
+// Información del paquete con cálculos
+message PackageWithCalculations {
+  Package package = 1;
+  // Peso volumétrico calculado (height * width * length / 5000)
+  double volumetric_kg = 2;
+  // Peso tarifable (max entre peso real y volumétrico)
+  double billable_kg = 3;
+}
+
+// Descuento aplicable a la orden
+message Discount {
+  DiscountType type = 1;
+  // Valor del descuento:
+  // - Para PERCENT: porcentaje (0-35)
+  // - Para FIXED: monto en centavos de Quetzal
+  // - Para NONE: ignorado
+  int64 value = 2;
+}
+
+// Desglose del cálculo tarifario (en centavos)
+message Breakdown {
+  // Peso tarifable total de todos los paquetes
+  double order_billable_kg = 1;
+  // Tarifa por kg según zona destino (en centavos)
+  int64 rate_per_kg_cents = 2;
+  // Subtotal base = order_billable_kg * rate_per_kg
+  int64 base_subtotal_cents = 3;
+  // Multiplicador del tipo de servicio (100 = 1.00, 135 = 1.35, 180 = 1.80)
+  int32 service_multiplier_percent = 4;
+  // Subtotal después del multiplicador de servicio
+  int64 service_subtotal_cents = 5;
+  // Recargo por paquetes frágiles
+  int64 fragile_surcharge_cents = 6;
+  // Recargo por seguro
+  int64 insurance_surcharge_cents = 7;
+  // Subtotal con recargos
+  int64 subtotal_with_surcharges_cents = 8;
+  // Monto del descuento aplicado
+  int64 discount_amount_cents = 9;
+  // Total final (redondeado a 2 decimales, representado en centavos)
+  int64 total_cents = 10;
+}
+
+// Orden completa
+message Order {
+  string order_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  Zone origin_zone = 3;
+  Zone destination_zone = 4;
+  ServiceType service_type = 5;
+  repeated PackageWithCalculations packages = 6;
+  Discount discount = 7;
+  bool insurance_enabled = 8;
+  OrderStatus status = 9;
+  Breakdown breakdown = 10;
+}
+
+// Resumen de orden para listado
+message OrderSummary {
+  string order_id = 1;
+  Zone destination_zone = 2;
+  ServiceType service_type = 3;
+  OrderStatus status = 4;
+  // Total en centavos
+  int64 total_cents = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// ============= REQUESTS Y RESPONSES =============
+
+// CreateOrder
+message CreateOrderRequest {
+  Zone origin_zone = 1;
+  Zone destination_zone = 2;
+  ServiceType service_type = 3;
+  repeated Package packages = 4;
+  Discount discount = 5;
+  bool insurance_enabled = 6;
+}
+
+message CreateOrderResponse {
+  Order order = 1;
+}
+
+// ListOrders
+message ListOrdersRequest {
+  // Tamaño de página (default: 10, max: 100)
+  int32 page_size = 1;
+  // Token de página para paginación
+  string page_token = 2;
+}
+
+message ListOrdersResponse {
+  repeated OrderSummary orders = 1;
+  // Token para la siguiente página (vacío si no hay más)
+  string next_page_token = 2;
+  // Total de órdenes
+  int32 total_count = 3;
+}
+
+// GetOrder
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+// CancelOrder
+message CancelOrderRequest {
+  string order_id = 1;
+}
+
+message CancelOrderResponse {
+  Order order = 1;
+}
+
+// GetReceipt
+message GetReceiptRequest {
+  string order_id = 1;
+}
+
+message GetReceiptResponse {
+  Receipt receipt = 1;
+}
+
+// Recibo completo
+message Receipt {
+  string receipt_id = 1;
+  string order_id = 2;
+  google.protobuf.Timestamp generated_at = 3;
+
+  // Información de la orden
+  Zone origin_zone = 4;
+  Zone destination_zone = 5;
+  ServiceType service_type = 6;
+  OrderStatus order_status = 7;
+  google.protobuf.Timestamp order_created_at = 8;
+
+  // Detalle de paquetes
+  repeated PackageWithCalculations packages = 9;
+
+  // Opciones
+  bool insurance_enabled = 10;
+  Discount discount = 11;
+
+  // Desglose completo
+  Breakdown breakdown = 12;
+
+  // Representación formateada del total (ej: "Q 125.50")
+  string formatted_total = 13;
+}
