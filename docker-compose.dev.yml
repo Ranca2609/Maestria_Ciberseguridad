@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Servidor gRPC en modo desarrollo
   grpc-server:
