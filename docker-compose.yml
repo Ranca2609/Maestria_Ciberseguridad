@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile
     container_name: quetzalship-frontend
     ports:
-      - "3000:80"
+      - "4200:80"
     depends_on:
       - gateway
     networks:
