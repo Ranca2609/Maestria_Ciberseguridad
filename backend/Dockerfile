@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependencias
-RUN npm ci
+RUN npm install
 
 # Copiar código fuente
 COPY . .
@@ -26,7 +26,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/proto ./proto
 
 # Instalar solo dependencias de producción
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Exponer puerto gRPC
 EXPOSE 50051
