@@ -1,5 +1,5 @@
 services:
-  # Servidor gRPC principal
+  # Servidor gRPC QuetzalShip
   grpc-server:
     build:
       context: ./backend
@@ -7,37 +7,6 @@ services:
     container_name: quetzalship-grpc
     ports:
       - "50051:50051"
-    networks:
-      - quetzalship-network
-    restart: unless-stopped
-
-  # Gateway REST (proxy gRPC -> REST)
-  gateway:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.gateway
-    container_name: quetzalship-gateway
-    ports:
-      - "3001:3001"
-    environment:
-      - GRPC_URL=grpc-server:50051
-      - GATEWAY_PORT=3001
-    depends_on:
-      - grpc-server
-    networks:
-      - quetzalship-network
-    restart: unless-stopped
-
-  # Frontend React
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: quetzalship-frontend
-    ports:
-      - "4200:80"
-    depends_on:
-      - gateway
     networks:
       - quetzalship-network
     restart: unless-stopped
