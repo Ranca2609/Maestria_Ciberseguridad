@@ -1,0 +1,290 @@
+name: QuetzalShip CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Lint and type-check all services
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [pricing, orders, receipt, gateway]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: services/${{ matrix.service }}
+        run: npm run lint --if-present
+
+      - name: Type check
+        working-directory: services/${{ matrix.service }}
+        run: npx tsc --noEmit
+
+  # Run unit tests for all services
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        service: [pricing, orders, receipt, gateway]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm ci
+
+      - name: Copy proto files
+        run: |
+          mkdir -p services/${{ matrix.service }}/proto
+          cp contracts/proto/*.proto services/${{ matrix.service }}/proto/
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        run: npm test -- --passWithNoTests
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.service }}
+          path: services/${{ matrix.service }}/coverage/
+          retention-days: 7
+
+  # Lint frontend separately (different tooling)
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: services/frontend
+        run: npm run lint --if-present
+
+      - name: Type check
+        working-directory: services/frontend
+        run: npx tsc --noEmit
+
+  # Build frontend
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: lint-frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: services/frontend
+        env:
+          VITE_API_BASE_URL: http://localhost:3000
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: services/frontend/dist/
+          retention-days: 7
+
+  # Build Docker images
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, build-frontend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Pricing Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/pricing
+          push: false
+          tags: quetzalship-pricing:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Orders Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/orders
+          push: false
+          tags: quetzalship-orders:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Receipt Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/receipt
+          push: false
+          tags: quetzalship-receipt:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/gateway
+          push: false
+          tags: quetzalship-gateway:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/frontend
+          push: false
+          tags: quetzalship-frontend:${{ github.sha }}
+          build-args: |
+            VITE_API_BASE_URL=http://localhost:3000
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Integration test with Docker Compose
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build-docker
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy proto files to services
+        run: |
+          for service in pricing orders receipt gateway; do
+            mkdir -p services/$service/proto
+            cp contracts/proto/*.proto services/$service/proto/
+          done
+
+      - name: Start services with Docker Compose
+        run: |
+          docker compose up -d --build
+          sleep 30
+
+      - name: Check services health
+        run: |
+          # Check Gateway health
+          curl -f http://localhost:3000/health || exit 1
+          echo "Gateway is healthy"
+
+          # Check Frontend health
+          curl -f http://localhost:4200/health || exit 1
+          echo "Frontend is healthy"
+
+      - name: Run API integration tests
+        run: |
+          # Test create order endpoint
+          RESPONSE=$(curl -s -X POST http://localhost:3000/api/v1/orders \
+            -H "Content-Type: application/json" \
+            -H "Idempotency-Key: test-key-$(date +%s)" \
+            -d '{
+              "clientName": "Test Client",
+              "originZone": "METRO",
+              "destinationZone": "INTERIOR",
+              "serviceType": "EXPRESS",
+              "packages": [{
+                "weightKg": 5,
+                "heightCm": 30,
+                "widthCm": 20,
+                "lengthCm": 15,
+                "fragile": false,
+                "declaredValueQ": 100
+              }],
+              "insuranceEnabled": true
+            }')
+          echo "Create order response: $RESPONSE"
+
+          ORDER_ID=$(echo $RESPONSE | jq -r '.orderId')
+          if [ "$ORDER_ID" == "null" ] || [ -z "$ORDER_ID" ]; then
+            echo "Failed to create order"
+            exit 1
+          fi
+          echo "Created order: $ORDER_ID"
+
+          # Test list orders endpoint
+          LIST_RESPONSE=$(curl -s http://localhost:3000/api/v1/orders)
+          echo "List orders response: $LIST_RESPONSE"
+
+          # Test get order endpoint
+          GET_RESPONSE=$(curl -s http://localhost:3000/api/v1/orders/$ORDER_ID)
+          echo "Get order response: $GET_RESPONSE"
+
+          # Test get receipt endpoint
+          RECEIPT_RESPONSE=$(curl -s http://localhost:3000/api/v1/orders/$ORDER_ID/receipt)
+          echo "Receipt response: $RECEIPT_RESPONSE"
+
+      - name: Show Docker Compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+  # Final status check
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, lint-frontend, build-frontend, build-docker, integration-test]
+    steps:
+      - name: CI Pipeline Successful
+        run: echo "All CI checks passed successfully!"

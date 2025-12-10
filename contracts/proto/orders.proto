@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package orders;
+
+option go_package = "./orders";
+
+import "pricing.proto";
+
+// Orders Service - Administra el ciclo de vida de órdenes
+service OrdersService {
+  // Crea una nueva orden
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  // Lista todas las órdenes
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  // Obtiene detalle de una orden
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  // Cancela una orden
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  // Obtiene una orden para generar recibo
+  rpc GetOrderForReceipt(GetOrderForReceiptRequest) returns (GetOrderForReceiptResponse);
+}
+
+// Enums
+enum OrderStatus {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_CANCELLED = 2;
+}
+
+// Messages
+message Package {
+  double weight_kg = 1;
+  double height_cm = 2;
+  double width_cm = 3;
+  double length_cm = 4;
+  bool fragile = 5;
+  double declared_value_q = 6;
+}
+
+message Discount {
+  pricing.DiscountType type = 1;
+  double value = 2;
+}
+
+message Breakdown {
+  double order_billable_kg = 1;
+  double base_subtotal = 2;
+  double service_subtotal = 3;
+  double fragile_surcharge = 4;
+  double insurance_surcharge = 5;
+  double subtotal_with_surcharges = 6;
+  double discount_amount = 7;
+  double total = 8;
+  double rate_per_kg = 9;
+  double service_multiplier = 10;
+  int32 fragile_packages_count = 11;
+  double declared_value_total = 12;
+}
+
+message Order {
+  string order_id = 1;
+  string created_at = 2;
+  pricing.Zone origin_zone = 3;
+  pricing.Zone destination_zone = 4;
+  pricing.ServiceType service_type = 5;
+  repeated Package packages = 6;
+  Discount discount = 7;
+  bool insurance_enabled = 8;
+  OrderStatus status = 9;
+  Breakdown breakdown = 10;
+  double total = 11;
+}
+
+message OrderSummary {
+  string order_id = 1;
+  pricing.Zone destination_zone = 2;
+  pricing.ServiceType service_type = 3;
+  OrderStatus status = 4;
+  double total = 5;
+  string created_at = 6;
+}
+
+// Request/Response messages
+message CreateOrderRequest {
+  pricing.Zone origin_zone = 1;
+  pricing.Zone destination_zone = 2;
+  pricing.ServiceType service_type = 3;
+  repeated Package packages = 4;
+  Discount discount = 5;
+  bool insurance_enabled = 6;
+  string idempotency_key = 7;
+}
+
+message CreateOrderResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
+  string created_at = 3;
+  Breakdown breakdown = 4;
+  double total = 5;
+}
+
+message ListOrdersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message ListOrdersResponse {
+  repeated OrderSummary orders = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+}
+
+message CancelOrderResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
+  string cancelled_at = 3;
+}
+
+message GetOrderForReceiptRequest {
+  string order_id = 1;
+}
+
+message GetOrderForReceiptResponse {
+  Order order = 1;
+}
