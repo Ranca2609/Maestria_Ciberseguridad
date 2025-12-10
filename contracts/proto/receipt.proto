@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package receipt;
+
+option go_package = "./receipt";
+
+// Receipt Service - Genera recibos estables
+service ReceiptService {
+  // Genera un recibo para una orden
+  rpc GenerateReceipt(GenerateReceiptRequest) returns (GenerateReceiptResponse);
+}
+
+// Enums (duplicados para independencia del servicio)
+enum Zone {
+  ZONE_UNSPECIFIED = 0;
+  ZONE_METRO = 1;
+  ZONE_INTERIOR = 2;
+  ZONE_FRONTERA = 3;
+}
+
+enum ServiceType {
+  SERVICE_UNSPECIFIED = 0;
+  SERVICE_STANDARD = 1;
+  SERVICE_EXPRESS = 2;
+  SERVICE_SAME_DAY = 3;
+}
+
+enum DiscountType {
+  DISCOUNT_NONE = 0;
+  DISCOUNT_PERCENT = 1;
+  DISCOUNT_FIXED = 2;
+}
+
+enum OrderStatus {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_CANCELLED = 2;
+}
+
+// Messages
+message Package {
+  double weight_kg = 1;
+  double height_cm = 2;
+  double width_cm = 3;
+  double length_cm = 4;
+  bool fragile = 5;
+  double declared_value_q = 6;
+}
+
+message Discount {
+  DiscountType type = 1;
+  double value = 2;
+}
+
+message Breakdown {
+  double order_billable_kg = 1;
+  double base_subtotal = 2;
+  double service_subtotal = 3;
+  double fragile_surcharge = 4;
+  double insurance_surcharge = 5;
+  double subtotal_with_surcharges = 6;
+  double discount_amount = 7;
+  double total = 8;
+  double rate_per_kg = 9;
+  double service_multiplier = 10;
+  int32 fragile_packages_count = 11;
+  double declared_value_total = 12;
+}
+
+message OrderData {
+  string order_id = 1;
+  string created_at = 2;
+  Zone origin_zone = 3;
+  Zone destination_zone = 4;
+  ServiceType service_type = 5;
+  repeated Package packages = 6;
+  Discount discount = 7;
+  bool insurance_enabled = 8;
+  OrderStatus status = 9;
+  Breakdown breakdown = 10;
+  double total = 11;
+}
+
+message ReceiptLine {
+  string description = 1;
+  double amount = 2;
+}
+
+message Receipt {
+  string receipt_id = 1;
+  string order_id = 2;
+  string generated_at = 3;
+  string status = 4;
+  // Información del envío
+  string origin_zone = 5;
+  string destination_zone = 6;
+  string service_type = 7;
+  int32 packages_count = 8;
+  // Desglose
+  repeated ReceiptLine lines = 9;
+  double subtotal = 10;
+  double discount = 11;
+  double total = 12;
+  // Metadata
+  bool insurance_enabled = 13;
+  double declared_value = 14;
+}
+
+// Request/Response
+message GenerateReceiptRequest {
+  OrderData order = 1;
+}
+
+message GenerateReceiptResponse {
+  Receipt receipt = 1;
+}

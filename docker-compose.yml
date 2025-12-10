@@ -1,47 +1,135 @@
+version: '3.8'
+
 services:
-  # Servidor gRPC principal
-  grpc-server:
+  # Pricing Service - gRPC microservice for price calculations
+  pricing:
     build:
-      context: ./backend
+      context: ./services/pricing
       dockerfile: Dockerfile
-    container_name: quetzalship-grpc
+    container_name: quetzalship-pricing
     ports:
       - "50051:50051"
+    environment:
+      - NODE_ENV=production
+      - GRPC_PORT=50051
+    volumes:
+      - ./contracts/proto:/app/proto:ro
     networks:
       - quetzalship-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50051, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Gateway REST (proxy gRPC -> REST)
+  # Orders Service - gRPC microservice for order management
+  orders:
+    build:
+      context: ./services/orders
+      dockerfile: Dockerfile
+    container_name: quetzalship-orders
+    ports:
+      - "50052:50052"
+    environment:
+      - NODE_ENV=production
+      - GRPC_PORT=50052
+      - PRICING_SERVICE_URL=pricing:50051
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    depends_on:
+      pricing:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50052, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Receipt Service - gRPC microservice for receipt generation
+  receipt:
+    build:
+      context: ./services/receipt
+      dockerfile: Dockerfile
+    container_name: quetzalship-receipt
+    ports:
+      - "50054:50054"
+    environment:
+      - NODE_ENV=production
+      - GRPC_PORT=50054
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    networks:
+      - quetzalship-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50054, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Gateway - REST API Gateway
   gateway:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.gateway
+      context: ./services/gateway
+      dockerfile: Dockerfile
     container_name: quetzalship-gateway
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
-      - GRPC_URL=grpc-server:50051
-      - GATEWAY_PORT=3001
+      - NODE_ENV=production
+      - PORT=3000
+      - ORDERS_SERVICE_URL=orders:50052
+      - RECEIPT_SERVICE_URL=receipt:50054
+      - CORS_ORIGIN=http://localhost:4200
+      - GRPC_TIMEOUT_MS=2000
+    volumes:
+      - ./contracts/proto:/app/proto:ro
     depends_on:
-      - grpc-server
+      orders:
+        condition: service_healthy
+      receipt:
+        condition: service_healthy
     networks:
       - quetzalship-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Frontend React
+  # Frontend - Vite + TypeScript SPA
   frontend:
     build:
-      context: ./frontend
+      context: ./services/frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:3000
     container_name: quetzalship-frontend
     ports:
-      - "4200:80"
+      - "4200:4200"
     depends_on:
-      - gateway
+      gateway:
+        condition: service_healthy
     networks:
       - quetzalship-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   quetzalship-network:
     driver: bridge
+    name: quetzalship-network

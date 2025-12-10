@@ -1,73 +1,137 @@
-# QuetzalShip - Sistema de Envíos
+# QuetzalShip v2.0 - Sistema de Envíos
 
-Microservicio de gestión de órdenes de envío desarrollado con NestJS + TypeScript y gRPC.
+Sistema de gestión de envíos basado en microservicios con arquitectura Gateway, desarrollado con NestJS + TypeScript, gRPC y React.
 
 ## Tabla de Contenidos
 
 - [Descripción](#descripción)
 - [Arquitectura](#arquitectura)
+- [Servicios](#servicios)
 - [Requisitos](#requisitos)
 - [Instalación](#instalación)
 - [Ejecución](#ejecución)
 - [Docker](#docker)
+- [CI/CD](#cicd)
+- [API REST](#api-rest)
 - [Pruebas](#pruebas)
-- [API gRPC](#api-grpc)
-- [Frontend](#frontend)
+- [Idempotencia](#idempotencia)
 - [Principios SOLID](#principios-solid)
-- [Representación de Dinero](#representación-de-dinero)
 - [Tags](#tags)
 
 ## Descripción
 
-QuetzalShip es un microservicio que permite:
+QuetzalShip v2.0 es un sistema de microservicios que permite:
 - Crear órdenes de envío con múltiples paquetes
-- Calcular tarifas basadas en zona, servicio, peso y dimensiones
-- Aplicar descuentos y seguros
+- Calcular tarifas basadas en zona (METRO, INTERIOR, FRONTERA), servicio (STANDARD, EXPRESS, SAME_DAY), peso y dimensiones
+- Aplicar descuentos porcentuales (máx 35%) o fijos
+- Aplicar seguros sobre valor declarado (2.5%)
 - Consultar, listar y cancelar órdenes
-- Generar recibos con desglose de cálculos
+- Generar recibos con desglose completo de cálculos
 
 ## Arquitectura
 
 ```
-├── backend/                 # Servidor NestJS + gRPC
-│   ├── src/
-│   │   ├── order/          # Módulo de órdenes
-│   │   │   ├── calculators/  # Calculadores (SOLID)
-│   │   │   ├── validators/   # Validadores
-│   │   │   ├── repositories/ # Repositorio en memoria
-│   │   │   ├── services/     # Servicios de negocio
-│   │   │   └── controllers/  # Controlador gRPC
-│   │   ├── gateway/        # Gateway REST para frontend
-│   │   └── shared/         # Interfaces y enums
-│   ├── proto/              # Archivos .proto
-│   └── test/               # Pruebas unitarias
-├── frontend/               # Aplicación React
-│   └── src/
-│       ├── components/     # Componentes React
-│       ├── services/       # API client
-│       └── styles/         # CSS
-└── docs/postman/           # Colección Postman gRPC
+┌─────────────────┐     ┌─────────────────┐
+│    Frontend     │────▶│     Gateway     │
+│  (Vite + React) │     │   (REST API)    │
+│    :4200        │     │     :3000       │
+└─────────────────┘     └────────┬────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │            │
+                    ▼            ▼            ▼
+            ┌───────────┐ ┌───────────┐ ┌───────────┐
+            │  Pricing  │ │  Orders   │ │  Receipt  │
+            │  Service  │ │  Service  │ │  Service  │
+            │  (gRPC)   │ │  (gRPC)   │ │  (gRPC)   │
+            │  :50051   │ │  :50052   │ │  :50054   │
+            └───────────┘ └─────┬─────┘ └───────────┘
+                                │
+                                ▼
+                        ┌───────────┐
+                        │  Pricing  │
+                        │  Service  │
+                        └───────────┘
 ```
+
+### Estructura de Directorios
+
+```
+├── contracts/
+│   ├── openapi/              # Especificación OpenAPI 3.0
+│   │   └── quetzalship-gateway.yaml
+│   └── proto/                # Archivos Protocol Buffers
+│       ├── pricing.proto
+│       ├── orders.proto
+│       └── receipt.proto
+├── services/
+│   ├── pricing/              # Microservicio de cálculo de precios
+│   ├── orders/               # Microservicio de gestión de órdenes
+│   ├── receipt/              # Microservicio de generación de recibos
+│   ├── gateway/              # API Gateway REST
+│   └── frontend/             # Aplicación web Vite + React
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # Pipeline CI/CD
+└── docker-compose.yml
+```
+
+## Servicios
+
+### Pricing Service (gRPC - :50051)
+- Calcula precios basados en zonas, servicios y paquetes
+- Implementa peso volumétrico (L×W×H/5000)
+- Aplica recargos por fragilidad (Q7/paquete)
+- Aplica seguros (2.5% del valor declarado)
+- Descuentos porcentuales (máx 35%) o fijos
+
+### Orders Service (gRPC - :50052)
+- Gestión completa de órdenes (CRUD)
+- Estados: ACTIVE, CANCELLED
+- Persistencia en memoria
+- Soporte de idempotencia
+- Integración con Pricing Service
+
+### Receipt Service (gRPC - :50054)
+- Generación de recibos formateados
+- Desglose completo de cálculos
+- Formato texto para impresión
+
+### Gateway (REST - :3000)
+- API REST documentada con Swagger
+- Traducción REST ↔ gRPC
+- Health checks
+- Resiliencia (timeout + retry)
+- Validación de entrada
+
+### Frontend (HTTP - :4200)
+- SPA con Vite + React + TypeScript
+- Interfaz minimalista
+- Creación de órdenes
+- Lista con paginación
+- Detalle y recibos
 
 ## Requisitos
 
-- Node.js >= 18
+- Node.js >= 20
 - npm >= 9
-- Docker y Docker Compose (opcional)
+- Docker y Docker Compose
 
 ## Instalación
 
-### Backend
+### Todos los servicios
 
 ```bash
-cd backend
-npm install
+# Instalar dependencias de todos los servicios
+for service in pricing orders receipt gateway frontend; do
+  cd services/$service && npm install && cd ../..
+done
 ```
 
-### Frontend
+### Servicio individual
 
 ```bash
-cd frontend
+cd services/<servicio>
 npm install
 ```
 
@@ -75,191 +139,220 @@ npm install
 
 ### Modo Desarrollo (Local)
 
-**Terminal 1 - Servidor gRPC:**
 ```bash
-cd backend
-npm run start:dev
+# Terminal 1 - Pricing Service
+cd services/pricing && npm run start:dev
+
+# Terminal 2 - Orders Service
+cd services/orders && npm run start:dev
+
+# Terminal 3 - Receipt Service
+cd services/receipt && npm run start:dev
+
+# Terminal 4 - Gateway
+cd services/gateway && npm run start:dev
+
+# Terminal 5 - Frontend
+cd services/frontend && npm run dev
 ```
 
-**Terminal 2 - Gateway REST:**
-```bash
-cd backend
-npm run start:gateway
-```
-
-**Terminal 3 - Frontend:**
-```bash
-cd frontend
-npm run dev
-```
-
-Acceder a:
-- gRPC: `localhost:50051`
-- Gateway REST: `http://localhost:3001`
-- Frontend: `http://localhost:5173`
-
-### Modo Producción (Local)
-
-```bash
-cd backend
-npm run build
-npm run start:prod &
-npm run start:gateway:prod &
-
-cd ../frontend
-npm run build
-npm run preview
-```
+### Acceso
+| Servicio | URL |
+|----------|-----|
+| Frontend | http://localhost:4200 |
+| Gateway (Swagger) | http://localhost:3000/api |
+| Health Check | http://localhost:3000/health |
 
 ## Docker
 
-### Levantar todo con Docker Compose
+### Levantar con Docker Compose
 
 ```bash
 # Construir y levantar todos los servicios
-docker-compose up --build
+docker compose up --build
 
 # O en segundo plano
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-### Servicios disponibles:
+### Servicios Docker
 
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| grpc-server | 50051 | Servidor gRPC principal |
-| gateway | 3001 | API REST (proxy a gRPC) |
-| frontend | 80 | Aplicación web React |
+| Contenedor | Puerto | Descripción |
+|------------|--------|-------------|
+| quetzalship-pricing | 50051 | Servicio de precios (gRPC) |
+| quetzalship-orders | 50052 | Servicio de órdenes (gRPC) |
+| quetzalship-receipt | 50054 | Servicio de recibos (gRPC) |
+| quetzalship-gateway | 3000 | API Gateway (REST) |
+| quetzalship-frontend | 4200 | Frontend (nginx) |
 
-### Comandos Docker útiles:
+### Comandos útiles
 
 ```bash
-# Ver logs
-docker-compose logs -f
+# Ver logs de todos los servicios
+docker compose logs -f
 
-# Detener servicios
-docker-compose down
+# Ver logs de un servicio específico
+docker compose logs -f gateway
 
-# Reconstruir un servicio específico
-docker-compose build grpc-server
+# Detener todos los servicios
+docker compose down
 
-# Desarrollo con hot-reload
-docker-compose -f docker-compose.dev.yml up
+# Detener y eliminar volúmenes
+docker compose down -v
+```
+
+## CI/CD
+
+Pipeline de GitHub Actions (`.github/workflows/ci.yml`):
+
+1. **Lint & Type Check**: ESLint y TypeScript para todos los servicios
+2. **Unit Tests**: Jest con cobertura
+3. **Build Frontend**: Compilación de Vite
+4. **Build Docker**: Construcción de imágenes
+5. **Integration Tests**: Pruebas E2E con Docker Compose
+
+### Ejecutar localmente
+
+```bash
+# Lint
+cd services/<servicio> && npm run lint
+
+# Tests
+cd services/<servicio> && npm test
+
+# Build
+cd services/<servicio> && npm run build
+```
+
+## API REST
+
+### Endpoints
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | /api/v1/orders | Crear orden |
+| GET | /api/v1/orders | Listar órdenes |
+| GET | /api/v1/orders/:id | Obtener orden |
+| PATCH | /api/v1/orders/:id/cancel | Cancelar orden |
+| GET | /api/v1/orders/:id/receipt | Obtener recibo |
+| GET | /health | Health check |
+
+### Documentación Swagger
+
+Acceder a: http://localhost:3000/api
+
+### Ejemplo: Crear Orden
+
+```bash
+curl -X POST http://localhost:3000/api/v1/orders \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-key-123" \
+  -d '{
+    "clientName": "Juan Pérez",
+    "originZone": "METRO",
+    "destinationZone": "INTERIOR",
+    "serviceType": "EXPRESS",
+    "packages": [{
+      "weightKg": 5,
+      "heightCm": 30,
+      "widthCm": 20,
+      "lengthCm": 15,
+      "fragile": true,
+      "declaredValueQ": 500
+    }],
+    "insuranceEnabled": true
+  }'
 ```
 
 ## Pruebas
 
-### Ejecutar pruebas unitarias
+### Ejecutar tests unitarios
 
 ```bash
-cd backend
-npm test
-```
+# Pricing Service
+cd services/pricing && npm test
 
-### Ejecutar con cobertura
-
-```bash
+# Con cobertura
 npm run test:cov
 ```
 
-### Casos de prueba incluidos:
+### Casos de prueba incluidos
 
-- **Cálculos:**
-  - Peso volumétrico por paquete
-  - Peso tarifable por paquete
-  - Acumulación multi-paquete
-  - Tarifa base por zona destino
-  - Multiplicador por servicio
-  - Recargo frágil por paquete
-  - Recargo por seguro
-  - Descuento PERCENT con límite 35
-  - Descuento FIXED con truncamiento a 0.00
-  - Redondeo final a 2 decimales
+- Cálculo METRO + STANDARD
+- Multiplicador EXPRESS (1.35×)
+- Multiplicador SAME_DAY (1.8×)
+- Recargo frágil (Q7/paquete)
+- Seguro (2.5% valor declarado)
+- Descuento porcentual
+- Límite descuento 35%
+- Descuento fijo
+- Truncamiento a Q0.00
+- Validación peso <= 0
+- Validación dimensiones <= 0
+- Peso volumétrico > peso real
 
-- **Validaciones:**
-  - Peso o dimensiones <= 0
-  - insuranceEnabled=true con suma declarada = 0
-  - Descuento PERCENT > 35
-  - orderId inexistente
-  - Doble cancelación
+## Idempotencia
 
-## API gRPC
+El sistema soporta operaciones idempotentes mediante el header `Idempotency-Key`:
 
-### Operaciones disponibles:
+```bash
+# Primera llamada - crea la orden
+curl -X POST http://localhost:3000/api/v1/orders \
+  -H "Idempotency-Key: order-abc-123" \
+  -d '{...}'
 
-| RPC | Descripción |
-|-----|-------------|
-| CreateOrder | Crear nueva orden de envío |
-| ListOrders | Listar órdenes con paginación |
-| GetOrder | Obtener detalle de una orden |
-| CancelOrder | Cancelar una orden activa |
-| GetReceipt | Generar recibo de una orden |
+# Segunda llamada con misma key - retorna resultado cacheado
+curl -X POST http://localhost:3000/api/v1/orders \
+  -H "Idempotency-Key: order-abc-123" \
+  -d '{...}'
+```
 
-### Archivo Proto
-
-Ubicación: `backend/proto/quetzalship.proto`
-
-### Colección Postman
-
-Ubicación: `docs/postman/QuetzalShip.postman_collection.json`
-
-Incluye 2 casos válidos y 1 caso inválido por cada operación.
-
-## Frontend
-
-### Características:
-
-- **Diseño minimalista** con CSS puro
-- **Intuitivo**: navegación por pestañas
-- **Funcionalidades:**
-  - Lista de órdenes con paginación
-  - Crear nueva orden con múltiples paquetes
-  - Ver detalle de orden con desglose
-  - Cancelar órdenes activas
-  - Generar y visualizar recibos
+- TTL de cache: 24 horas
+- Hash SHA256 del payload para validación
+- Almacenamiento en memoria
 
 ## Principios SOLID
 
-### SRP (Single Responsibility Principle)
-- Cada calculador tiene una responsabilidad única:
-  - `PackageCalculator`: cálculos de paquete
-  - `RateCalculator`: tarifas por zona/servicio
-  - `SurchargeCalculator`: recargos
-  - `DiscountCalculator`: descuentos
-  - `TariffCalculator`: orquestación
+### SRP (Single Responsibility)
+Cada calculador tiene una responsabilidad única:
+- `PackageCalculator`: peso volumétrico y tarifable
+- `RateCalculator`: tarifas por zona
+- `ServiceCalculator`: multiplicadores de servicio
+- `SurchargeCalculator`: recargos
+- `DiscountCalculator`: descuentos
 
-### OCP (Open/Closed Principle)
-- Agregar nuevo tipo de servicio o recargo se hace agregando clases, no modificando las existentes.
+### OCP (Open/Closed)
+Agregar nuevas zonas, servicios o descuentos sin modificar código existente.
 
-### ISP (Interface Segregation Principle)
-- Interfaces pequeñas y específicas:
-  - `IOrderRepository`
-  - `IPackageCalculator`
-  - `IRateCalculator`
-  - `IReceiptGenerator`
-
-### DIP (Dependency Inversion Principle)
-- Servicios dependen de interfaces (tokens), no implementaciones concretas.
-- Inyección de dependencias via NestJS DI.
-
-## Representación de Dinero
-
-Para evitar problemas de punto flotante, **todo el dinero se representa en centavos** (enteros):
-
-- `declaredValueCents`: valor declarado en centavos
-- `totalCents`: total en centavos
-- `ratePerKgCents`: tarifa por kg en centavos
-
-**Ejemplo:**
-- Q 125.50 = 12550 centavos
-- Q 8.00/kg = 800 centavos/kg
-
-El redondeo final a 2 decimales se garantiza al dividir centavos entre 100.
+### DIP (Dependency Inversion)
+Servicios dependen de interfaces, inyección vía NestJS DI.
 
 ## Tags
 
-- **P1-LEGACY**: Versión funcional mínima
-- **P1-REFACTOR**: Versión final con SOLID y tests
+| Tag | Descripción |
+|-----|-------------|
+| P1-LEGACY | Versión original (monolito) |
+| P1-REFACTOR | Versión con SOLID |
+| P2-MICROSERVICES | Arquitectura de microservicios |
+
+## Zonas y Tarifas
+
+| Zona | Tarifa Base (Q/kg) |
+|------|-------------------|
+| METRO | Q8.00 |
+| INTERIOR | Q12.00 |
+| FRONTERA | Q16.00 |
+
+| Servicio | Multiplicador |
+|----------|--------------|
+| STANDARD | 1.0× |
+| EXPRESS | 1.35× |
+| SAME_DAY | 1.8× |
+
+## Recargos
+
+- **Frágil**: Q7.00 por paquete marcado como frágil
+- **Seguro**: 2.5% del valor declarado total (solo si insuranceEnabled=true)
 
 ## Supuestos
 
@@ -267,23 +360,8 @@ El redondeo final a 2 decimales se garantiza al dividir centavos entre 100.
 2. La persistencia es en memoria (se pierde al reiniciar).
 3. Los IDs de orden son UUID v4 generados por el servidor.
 4. El pageSize máximo para ListOrders es 100.
-5. El descuento FIXED puede truncar el total a 0 si excede el subtotal.
-
-## Ejecución en Google Cloud
-
-```bash
-# Clonar repositorio
-git clone <url-repositorio>
-cd <nombre-repositorio>
-
-# Opción 1: Docker Compose
-docker-compose up -d --build
-
-# Opción 2: Ejecutar manualmente
-cd backend && npm install && npm run build && npm run start:prod &
-cd backend && npm run start:gateway:prod &
-cd frontend && npm install && npm run build && npm run preview
-```
+5. El descuento FIXED puede truncar el total a Q0.00.
+6. El timeout gRPC es de 2 segundos con 2 reintentos.
 
 ## Licencia
 
