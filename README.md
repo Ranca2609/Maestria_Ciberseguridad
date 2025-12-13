@@ -208,7 +208,7 @@ Pipeline de GitHub Actions (`.github/workflows/ci.yml`):
 1. **Lint & Type Check**: ESLint y TypeScript para todos los servicios
 2. **Unit Tests**: Jest con cobertura
 3. **Build Frontend**: Compilación de Vite
-4. **Build Docker**: Construcción de imágenes
+4. **Build & Push Docker**: Construcción y publicación de imágenes
 5. **Integration Tests**: Pruebas E2E con Docker Compose
 
 ### Ejecutar localmente
@@ -222,6 +222,64 @@ cd services/<servicio> && npm test
 
 # Build
 cd services/<servicio> && npm run build
+```
+
+## Docker Images
+
+### Container Registry
+
+Las imágenes se publican en **GitHub Container Registry (ghcr.io)**.
+
+### Repositorios de Imágenes
+
+| Servicio | Repositorio |
+|----------|-------------|
+| Pricing | `ghcr.io/<owner>/quetzalship-pricing` |
+| Orders | `ghcr.io/<owner>/quetzalship-orders` |
+| Receipt | `ghcr.io/<owner>/quetzalship-receipt` |
+| Gateway | `ghcr.io/<owner>/quetzalship-gateway` |
+| Frontend | `ghcr.io/<owner>/quetzalship-frontend` |
+
+### Reglas de Tagging
+
+| Evento | Formato del Tag | Ejemplo |
+|--------|-----------------|---------|
+| Push a `main` | `main-<SHORT_SHA>` | `main-f25f63d` |
+| Push a `main` | `main-latest` | `main-latest` |
+| Push a `release/<X>` | `<X>` | `v2.0.0` |
+| Pull Request | `pr-<PR_NUMBER>-<SHORT_SHA>` | `pr-42-a1b2c3d` |
+| Otras ramas | `<branch>-<SHORT_SHA>` | `develop-f25f63d` |
+
+### Ejemplos de Tags
+
+```bash
+# Push a main (commit f25f63d)
+ghcr.io/ranca2609/quetzalship-pricing:main-f25f63d
+ghcr.io/ranca2609/quetzalship-pricing:main-latest
+ghcr.io/ranca2609/quetzalship-gateway:main-f25f63d
+ghcr.io/ranca2609/quetzalship-gateway:main-latest
+
+# Push a release/v2.0.0
+ghcr.io/ranca2609/quetzalship-pricing:v2.0.0
+ghcr.io/ranca2609/quetzalship-gateway:v2.0.0
+ghcr.io/ranca2609/quetzalship-frontend:v2.0.0
+
+# Pull Request #42 (commit a1b2c3d)
+ghcr.io/ranca2609/quetzalship-pricing:pr-42-a1b2c3d
+ghcr.io/ranca2609/quetzalship-gateway:pr-42-a1b2c3d
+```
+
+### Uso de Imágenes
+
+```bash
+# Descargar imagen de release
+docker pull ghcr.io/ranca2609/quetzalship-gateway:v2.0.0
+
+# Descargar última versión de main
+docker pull ghcr.io/ranca2609/quetzalship-gateway:main-latest
+
+# Ejecutar contenedor
+docker run -p 3000:3000 ghcr.io/ranca2609/quetzalship-gateway:v2.0.0
 ```
 
 ## API REST
