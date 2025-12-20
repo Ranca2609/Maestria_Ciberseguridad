@@ -13,8 +13,8 @@ RUN npm install
 COPY services/receipt/ .
 COPY contracts/proto ./proto
 
-# Build the application
-RUN npm run build
+# Clean any existing dist and build fresh
+RUN rm -rf dist && npm run build
 
 # Production stage
 FROM node:20-alpine AS production
