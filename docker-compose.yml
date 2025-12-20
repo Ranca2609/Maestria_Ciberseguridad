@@ -4,8 +4,8 @@ services:
   # Pricing Service - gRPC microservice for price calculations
   pricing:
     build:
-      context: ./services/pricing
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/pricing/Dockerfile
     container_name: quetzalship-pricing
     ports:
       - "50051:50051"
@@ -27,8 +27,8 @@ services:
   # Orders Service - gRPC microservice for order management
   orders:
     build:
-      context: ./services/orders
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/orders/Dockerfile
     container_name: quetzalship-orders
     ports:
       - "50052:50052"
@@ -54,8 +54,8 @@ services:
   # Receipt Service - gRPC microservice for receipt generation
   receipt:
     build:
-      context: ./services/receipt
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/receipt/Dockerfile
     container_name: quetzalship-receipt
     ports:
       - "50054:50054"
@@ -77,8 +77,8 @@ services:
   # Gateway - REST API Gateway
   gateway:
     build:
-      context: ./services/gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/gateway/Dockerfile
     container_name: quetzalship-gateway
     ports:
       - "3000:3000"
@@ -109,8 +109,8 @@ services:
   # Frontend - Vite + TypeScript SPA
   frontend:
     build:
-      context: ./services/frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/frontend/Dockerfile
       args:
         - VITE_API_BASE_URL=http://localhost:3000
     container_name: quetzalship-frontend
