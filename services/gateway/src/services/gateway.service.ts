@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Inject, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, timeout, retry, catchError } from 'rxjs';
+import { firstValueFrom, timeout, retry, catchError, Observable } from 'rxjs';
 import {
   CreateOrderDto,
   Zone,
@@ -8,6 +8,74 @@ import {
   DiscountType,
   OrderStatus,
 } from '../dto';
+
+// gRPC Response interfaces
+interface IBreakdown {
+  orderBillableKg: number;
+  baseSubtotal: number;
+  serviceSubtotal: number;
+  fragileSurcharge: number;
+  insuranceSurcharge: number;
+  subtotalWithSurcharges: number;
+  discountAmount: number;
+  total: number;
+  ratePerKg: number;
+  serviceMultiplier: number;
+  fragilePackagesCount: number;
+  declaredValueTotal: number;
+}
+
+interface IOrderSummary {
+  orderId: string;
+  destinationZone: number;
+  serviceType: number;
+  status: number;
+  total: number;
+  createdAt: string;
+}
+
+interface IOrder {
+  orderId: string;
+  createdAt: string;
+  originZone: number;
+  destinationZone: number;
+  serviceType: number;
+  packages: any[];
+  discount?: { type: number; value: number };
+  insuranceEnabled: boolean;
+  status: number;
+  breakdown: IBreakdown;
+  total: number;
+}
+
+interface ICreateOrderResponse {
+  orderId: string;
+  status: number;
+  createdAt: string;
+  breakdown: IBreakdown;
+  total: number;
+}
+
+interface IListOrdersResponse {
+  orders: IOrderSummary[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+interface IGetOrderResponse {
+  order: IOrder;
+}
+
+interface ICancelOrderResponse {
+  orderId: string;
+  status: number;
+  cancelledAt: string;
+}
+
+interface IReceiptResponse {
+  receipt: string;
+}
 
 // gRPC Enum mappings
 const ZONE_TO_GRPC: Record<Zone, number> = {
@@ -53,15 +121,15 @@ const GRPC_TO_STATUS: Record<number, OrderStatus> = {
 
 // gRPC Service interfaces
 interface OrdersServiceClient {
-  createOrder(request: any): any;
-  listOrders(request: any): any;
-  getOrder(request: any): any;
-  cancelOrder(request: any): any;
-  getOrderForReceipt(request: any): any;
+  createOrder(request: any): Observable<ICreateOrderResponse>;
+  listOrders(request: any): Observable<IListOrdersResponse>;
+  getOrder(request: any): Observable<IGetOrderResponse>;
+  cancelOrder(request: any): Observable<ICancelOrderResponse>;
+  getOrderForReceipt(request: any): Observable<IGetOrderResponse>;
 }
 
 interface ReceiptServiceClient {
-  generateReceipt(request: any): any;
+  generateReceipt(request: any): Observable<IReceiptResponse>;
 }
 
 @Injectable()
