@@ -19,10 +19,33 @@ import {
   IBreakdown,
 } from '../interfaces/order.interface';
 import { InMemoryOrderRepository, InMemoryIdempotencyStore } from '../repositories';
+import { Observable } from 'rxjs';
+
+// Interface para la respuesta del Pricing Service
+interface IPricingBreakdown {
+  orderBillableKg: number;
+  baseSubtotal: number;
+  serviceSubtotal: number;
+  fragileSurcharge: number;
+  insuranceSurcharge: number;
+  subtotalWithSurcharges: number;
+  discountAmount: number;
+  total: number;
+  ratePerKg: number;
+  serviceMultiplier: number;
+  fragilePackagesCount: number;
+  declaredValueTotal: number;
+}
+
+interface IPricingResponse {
+  valid: boolean;
+  errorMessage?: string;
+  breakdown: IPricingBreakdown;
+}
 
 // Interface para el cliente de Pricing Service
 interface PricingServiceClient {
-  calculatePrice(request: any): any;
+  calculatePrice(request: any): Observable<IPricingResponse>;
 }
 
 @Injectable()
