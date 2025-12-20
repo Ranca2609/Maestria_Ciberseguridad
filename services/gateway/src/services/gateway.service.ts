@@ -73,8 +73,30 @@ interface ICancelOrderResponse {
   cancelledAt: string;
 }
 
+interface IReceiptLine {
+  description: string;
+  amount: number;
+}
+
+interface IReceipt {
+  receiptId: string;
+  orderId: string;
+  generatedAt: string;
+  status: string;
+  originZone: string;
+  destinationZone: string;
+  serviceType: string;
+  packagesCount: number;
+  lines: IReceiptLine[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  insuranceEnabled: boolean;
+  declaredValue: number;
+}
+
 interface IReceiptResponse {
-  receipt: string;
+  receipt: IReceipt;
 }
 
 // gRPC Enum mappings
