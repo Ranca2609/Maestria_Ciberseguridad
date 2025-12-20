@@ -10,7 +10,7 @@ async function bootstrap() {
       transport: Transport.GRPC,
       options: {
         package: 'orders',
-        protoPath: join(__dirname, '../../contracts/proto/orders.proto'),
+        protoPath: join(__dirname, '../proto/orders.proto'),
         url: `0.0.0.0:${process.env.GRPC_PORT || 50051}`,
       },
     },

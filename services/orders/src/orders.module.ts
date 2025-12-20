@@ -13,7 +13,7 @@ import { InMemoryOrderRepository, InMemoryIdempotencyStore } from './repositorie
         transport: Transport.GRPC,
         options: {
           package: 'pricing',
-          protoPath: join(__dirname, '../../contracts/proto/pricing.proto'),
+          protoPath: join(__dirname, '../proto/pricing.proto'),
           url: process.env.PRICING_SERVICE_URL || 'localhost:50052',
         },
       },
