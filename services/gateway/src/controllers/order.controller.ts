@@ -24,10 +24,10 @@ import {
   ListOrdersResponseDto,
   OrderDetailDto,
   CancelOrderResponseDto,
-  ReceiptDto,
   ErrorResponseDto,
   ListOrdersQueryDto,
 } from '../dto';
+import { ReceiptDto } from '../dto/newFile';
 
 @ApiTags('Orders')
 @Controller('v1/orders')

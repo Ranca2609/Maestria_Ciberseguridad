@@ -251,50 +251,6 @@ export class ReceiptLineDto {
   amount: number;
 }
 
-export class ReceiptDto {
-  @ApiProperty()
-  receiptId: string;
-
-  @ApiProperty()
-  orderId: string;
-
-  @ApiProperty()
-  generatedAt: string;
-
-  @ApiProperty()
-  status: string;
-
-  @ApiProperty()
-  originZone: string;
-
-  @ApiProperty()
-  destinationZone: string;
-
-  @ApiProperty()
-  serviceType: string;
-
-  @ApiProperty()
-  packagesCount: number;
-
-  @ApiProperty({ type: [ReceiptLineDto] })
-  lines: ReceiptLineDto[];
-
-  @ApiProperty()
-  subtotal: number;
-
-  @ApiProperty()
-  discount: number;
-
-  @ApiProperty()
-  total: number;
-
-  @ApiProperty()
-  insuranceEnabled: boolean;
-
-  @ApiProperty()
-  declaredValue: number;
-}
-
 export class ErrorResponseDto {
   @ApiProperty()
   statusCode: number;

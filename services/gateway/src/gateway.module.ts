@@ -12,7 +12,7 @@ import { GatewayService } from './services';
         transport: Transport.GRPC,
         options: {
           package: 'orders',
-          protoPath: join(__dirname, '../../contracts/proto/orders.proto'),
+          protoPath: join(__dirname, '../proto/orders.proto'),
           url: process.env.ORDERS_SERVICE_URL || 'localhost:50051',
         },
       },
@@ -21,7 +21,7 @@ import { GatewayService } from './services';
         transport: Transport.GRPC,
         options: {
           package: 'receipt',
-          protoPath: join(__dirname, '../../contracts/proto/receipt.proto'),
+          protoPath: join(__dirname, '../proto/receipt.proto'),
           url: process.env.RECEIPT_SERVICE_URL || 'localhost:50054',
         },
       },

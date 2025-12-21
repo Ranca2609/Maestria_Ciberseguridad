@@ -4,8 +4,8 @@ import {
   ListOrdersResponse,
   OrderDetail,
   CancelOrderResponse,
-  Receipt,
 } from '../types';
+import { ReceiptResponse } from '../types/receipt.types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -53,8 +53,8 @@ export const apiService = {
     return handleResponse<CancelOrderResponse>(response);
   },
 
-  async getReceipt(orderId: string): Promise<Receipt> {
+  async getReceipt(orderId: string): Promise<ReceiptResponse> {
     const response = await fetch(`${API_BASE_URL}/v1/orders/${orderId}/receipt`);
-    return handleResponse<Receipt>(response);
+    return handleResponse<ReceiptResponse>(response);
   },
 };

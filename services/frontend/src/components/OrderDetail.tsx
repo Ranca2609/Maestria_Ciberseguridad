@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { apiService } from '../services';
 import { OrderDetail as OrderDetailType, OrderStatus } from '../types';
 
@@ -17,7 +17,6 @@ const SERVICE_NAMES: Record<string, string> = {
 
 export function OrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
-  const navigate = useNavigate();
   const [order, setOrder] = useState<OrderDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

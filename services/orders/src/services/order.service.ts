@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 import {
   IOrder,
@@ -17,12 +17,26 @@ import {
   IGetOrderForReceiptResponse,
   OrderStatus,
   IBreakdown,
+  IPricingResponse,
+  Zone,
+  ServiceType,
+  IPackage,
+  IDiscount
 } from '../interfaces/order.interface';
-import { InMemoryOrderRepository, InMemoryIdempotencyStore } from '../repositories';
+import { InMemoryOrderRepository, InMemoryIdempotencyStore } from '../repositories/index';
 
 // Interface para el cliente de Pricing Service
 interface PricingServiceClient {
-  calculatePrice(request: any): any;
+  calculatePrice(
+    request: {
+      originZone: Zone;
+      destinationZone: Zone;
+      serviceType: ServiceType;
+      packages: IPackage[];
+      discount?: IDiscount;
+      insuranceEnabled: boolean;
+    }
+  ): Observable<IPricingResponse>; // ← Observables + tipo fuerte
 }
 
 @Injectable()

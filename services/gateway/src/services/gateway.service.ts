@@ -9,6 +9,27 @@ import {
   OrderStatus,
 } from '../dto';
 
+import { ReceiptDto } from '../dto/newFile';
+
+import {
+  ICreateOrderRequest,
+  ICreateOrderResponse,
+  IListOrdersRequest,
+  IListOrdersResponse,
+  IGetOrderRequest,
+  IGetOrderResponse,
+  ICancelOrderRequest,
+  ICancelOrderResponse,
+  IGetOrderForReceiptRequest,
+  IGetOrderForReceiptResponse,
+  IReceiptResponse,
+  IOrder,
+  IBreakdown,
+  IPackage,
+  IDiscount,
+} from '../shared';
+
+import { Observable } from 'rxjs';
 // gRPC Enum mappings
 const ZONE_TO_GRPC: Record<Zone, number> = {
   [Zone.METRO]: 1,
@@ -53,17 +74,16 @@ const GRPC_TO_STATUS: Record<number, OrderStatus> = {
 
 // gRPC Service interfaces
 interface OrdersServiceClient {
-  createOrder(request: any): any;
-  listOrders(request: any): any;
-  getOrder(request: any): any;
-  cancelOrder(request: any): any;
-  getOrderForReceipt(request: any): any;
+  createOrder(request: ICreateOrderRequest): Observable<ICreateOrderResponse>;
+  listOrders(request: IListOrdersRequest): Observable<IListOrdersResponse>;
+  getOrder(request: IGetOrderRequest): Observable<IGetOrderResponse>;
+  cancelOrder(request: ICancelOrderRequest): Observable<ICancelOrderResponse>;
+  getOrderForReceipt(request: IGetOrderForReceiptRequest): Observable<IGetOrderForReceiptResponse>;
 }
 
 interface ReceiptServiceClient {
-  generateReceipt(request: any): any;
+  generateReceipt(request: { order: IOrder }): Observable<IReceiptResponse>;
 }
-
 @Injectable()
 export class GatewayService implements OnModuleInit {
   private ordersService: OrdersServiceClient;
@@ -216,36 +236,80 @@ export class GatewayService implements OnModuleInit {
     }
   }
 
-  async getReceipt(orderId: string) {
-    try {
-      // Primero obtener la orden
-      const orderResponse = await firstValueFrom(
-        this.ordersService.getOrderForReceipt({ orderId }).pipe(
-          timeout(this.TIMEOUT_MS),
-          retry({ count: this.MAX_RETRIES, delay: 100 }),
-          catchError(err => {
-            throw this.mapGrpcError(err);
-          }),
-        ),
-      );
+  async getReceipt(orderId: string): Promise<ReceiptDto> {
+  try {
+    // 1. Obtener la orden (necesaria para orderId, total, etc.)
+    const orderResponse = await firstValueFrom(
+      this.ordersService.getOrderForReceipt({ orderId }).pipe(
+        timeout(this.TIMEOUT_MS),
+        retry({ count: this.MAX_RETRIES, delay: 100 }),
+        catchError(err => { throw this.mapGrpcError(err); }),
+      ),
+    );
 
-      // Luego generar el recibo
-      const receiptResponse = await firstValueFrom(
-        this.receiptService.generateReceipt({ order: orderResponse.order }).pipe(
-          timeout(this.TIMEOUT_MS),
-          retry({ count: this.MAX_RETRIES, delay: 100 }),
-          catchError(err => {
-            throw this.mapGrpcError(err);
-          }),
-        ),
-      );
+    const order = orderResponse.order;
 
-      return receiptResponse.receipt;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new HttpException('Service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
-    }
+    // 2. Generar el recibo (devuelve { receipt: string })
+    const receiptResponse = await firstValueFrom(
+      this.receiptService.generateReceipt({ order }).pipe(
+        timeout(this.TIMEOUT_MS),
+        retry({ count: this.MAX_RETRIES, delay: 100 }),
+        catchError(err => { throw this.mapGrpcError(err); }),
+      ),
+    );
+
+    // 3. Construir ReceiptDto manualmente
+    return new ReceiptDto({
+      receiptId: `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      orderId: order.orderId,
+      generatedAt: new Date().toISOString(),
+      status: 1, // ReceiptStatus.STATUS_GENERATED (si usas enum, usa 1 o el valor)
+      content: receiptResponse.receipt, // ✅ string (base64, HTML, etc.)
+      format: 'PDF', // o detecta según respuesta, pero probablemente siempre PDF
+      version: '1.0',
+      meta: {
+        totalAmount: order.total,
+        currency: 'Q',
+        // opcional: customerName, etc. — si los necesitas, pasa más datos en order
+      },
+    });
+  } catch (error) {
+    if (error instanceof HttpException) throw error;
+    throw new HttpException('Service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
   }
+}
+
+
+  // async getReceipt(orderId: string) {
+  //   try {
+  //     // Primero obtener la orden
+  //     const orderResponse = await firstValueFrom(
+  //       this.ordersService.getOrderForReceipt({ orderId }).pipe(
+  //         timeout(this.TIMEOUT_MS),
+  //         retry({ count: this.MAX_RETRIES, delay: 100 }),
+  //         catchError(err => {
+  //           throw this.mapGrpcError(err);
+  //         }),
+  //       ),
+  //     );
+
+  //     // Luego generar el recibo
+  //     const receiptResponse = await firstValueFrom(
+  //       this.receiptService.generateReceipt({ order: orderResponse.order }).pipe(
+  //         timeout(this.TIMEOUT_MS),
+  //         retry({ count: this.MAX_RETRIES, delay: 100 }),
+  //         catchError(err => {
+  //           throw this.mapGrpcError(err);
+  //         }),
+  //       ),
+  //     );
+
+  //     return { receipt: receiptResponse.receipt };
+  //   } catch (error) {
+  //     if (error instanceof HttpException) throw error;
+  //     throw new HttpException('Service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+  //   }
+  // }
 
   private mapGrpcError(error: any): HttpException {
     const code = error?.code || error?.details?.code;

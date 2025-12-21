@@ -142,6 +142,54 @@ export interface IGetOrderForReceiptResponse {
   order: IOrder;
 }
 
+// receipt.interface.ts
+export enum ReceiptStatus {
+  STATUS_DRAFT = 0,
+  STATUS_GENERATED = 1,
+  STATUS_ERROR = 2,
+}
+
+export interface IReceipt {
+  receiptId: string;
+  orderId: string;
+  generatedAt: string; // ISO string
+  status: ReceiptStatus;
+  content: string; // base64 PDF, HTML, etc.
+  format: 'PDF' | 'HTML' | 'TEXT';
+  version: string;
+  metadata: {
+    totalAmount: number;
+    currency: string;
+    customerName?: string;
+    // añade lo que necesites
+  };
+}
+
+// gRPC response (lo que devuelve el microservicio receipt)
+export interface IReceiptResponse {
+  receipt: string; // base64 PDF
+}
+// DTO para la API REST (lo que devuelve el controlador)
+export class ReceiptDto {
+  receiptId: string;
+  orderId: string;
+  generatedAt: string;
+  status: ReceiptStatus;
+  content: string;
+  format: 'PDF' | 'HTML' | 'TEXT';
+  version: string;
+  metadata: {
+    totalAmount: number;
+    currency: string;
+    customerName?: string;
+  };
+
+  constructor(partial: Partial<ReceiptDto>) {
+    Object.assign(this, partial);
+  }
+}
+
+
 // Repository interface (DIP)
 export interface IOrderRepository {
   save(order: IOrder): IOrder;

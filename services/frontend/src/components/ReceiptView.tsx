@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiService } from '../services';
 import { Receipt } from '../types';
+import { ReceiptResponse } from '../types/receipt.types';
 
 export function ReceiptView() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -15,19 +16,38 @@ export function ReceiptView() {
     }
   }, [orderId]);
 
-  const loadReceipt = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiService.getReceipt(orderId!);
-      setReceipt(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar el recibo');
-    } finally {
-      setLoading(false);
-    }
-  };
+// En loadReceipt:
+const loadReceipt = async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const result: ReceiptResponse = await apiService.getReceipt(orderId!); // ✅ tipado explícito
 
+    // ✅ Ahora TypeScript sabe que `result.content` existe
+    const mappedReceipt: Receipt = {
+      receiptId: result.receiptId,
+      orderId: result.orderId,
+      generatedAt: result.generatedAt,
+      status: result.content.status, // ← string, no número
+      originZone: result.content.originZone,
+      destinationZone: result.content.destinationZone,
+      serviceType: result.content.serviceType,
+      packagesCount: result.content.packagesCount,
+      lines: result.content.lines,
+      subtotal: result.content.subtotal,
+      discount: result.content.discount,
+      total: result.content.total,
+      insuranceEnabled: result.content.insuranceEnabled,
+      declaredValue: result.content.declaredValue,
+    };
+
+    setReceipt(mappedReceipt);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Error al cargar el recibo');
+  } finally {
+    setLoading(false);
+  }
+};
   if (loading) {
     return <div className="loading">Generando recibo...</div>;
   }
