@@ -81,13 +81,13 @@ services:
       dockerfile: services/gateway/Dockerfile
     container_name: quetzalship-gateway
     ports:
-      - "3000:3000"
+      - "192.0.2.96:3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - ORDERS_SERVICE_URL=orders:50052
       - RECEIPT_SERVICE_URL=receipt:50054
-      - CORS_ORIGIN=http://localhost:4200
+      - CORS_ORIGIN=http://192.0.2.96:4200
       - GRPC_TIMEOUT_MS=2000
     volumes:
       - ./contracts/proto:/app/proto:ro
@@ -112,10 +112,10 @@ services:
       context: .
       dockerfile: services/frontend/Dockerfile
       args:
-        - VITE_API_BASE_URL=http://localhost:3000
+        - VITE_API_BASE_URL=http://192.0.2.96:3000
     container_name: quetzalship-frontend
     ports:
-      - "4200:4200"
+      - "192.0.2.96:4200:4200"
     depends_on:
       gateway:
         condition: service_healthy
@@ -123,7 +123,7 @@ services:
       - quetzalship-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4200"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://192.0.2.96:4200"]
       interval: 30s
       timeout: 10s
       retries: 3

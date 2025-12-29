@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quetzalship
+  labels:
+    app.kubernetes.io/name: quetzalship
+    app.kubernetes.io/part-of: quetzalship-system
+---
+# ResourceQuota for the namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quetzalship-quota
+  namespace: quetzalship
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    persistentvolumeclaims: "5"
+---
+# LimitRange for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: quetzalship-limits
+  namespace: quetzalship
+spec:
+  limits:
+    - default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      type: Container

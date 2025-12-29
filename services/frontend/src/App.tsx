@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { CreateOrder, OrderList, OrderDetail, ReceiptView } from './components';
+import { CreateOrder, OrderList, OrderDetail, ReceiptView, CurrencyConverter } from './components';
 import './styles/index.css';
 
 function App() {
@@ -16,6 +16,9 @@ function App() {
             <NavLink to="/orders" className={({ isActive }) => isActive ? 'active' : ''}>
               Mis Órdenes
             </NavLink>
+            <NavLink to="/currency" className={({ isActive }) => isActive ? 'active' : ''}>
+              Conversión FX
+            </NavLink>
           </nav>
         </header>
 
@@ -25,6 +28,7 @@ function App() {
             <Route path="/orders" element={<OrderList />} />
             <Route path="/orders/:orderId" element={<OrderDetail />} />
             <Route path="/orders/:orderId/receipt" element={<ReceiptView />} />
+            <Route path="/currency" element={<CurrencyConverter />} />
           </Routes>
         </main>
 

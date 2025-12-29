@@ -7,6 +7,7 @@ Sistema de gestión de envíos basado en microservicios con arquitectura Gateway
 - [Descripción](#descripción)
 - [Arquitectura](#arquitectura)
 - [Servicios](#servicios)
+- [Observabilidad](#observabilidad)
 - [Requisitos](#requisitos)
 - [Instalación](#instalación)
 - [Ejecución](#ejecución)
@@ -78,6 +79,17 @@ QuetzalShip v2.0 es un sistema de microservicios que permite:
 
 ## Servicios
 
+### FX Service (gRPC - :50055) 🆕
+- **Conversión de moneda** (GTQ ↔ USD, EUR, GBP, MXN)
+- **Dos APIs externas**: ExchangeRate-API (primaria) + FreeCurrency (fallback)
+- **Caché con Redis**: TTL configurable (default 5 min)
+- **Resiliencia avanzada**:
+  - Circuit Breaker independiente por proveedor
+  - Retries con backoff exponencial (1s → 2s → 4s)
+  - Timeouts configurables (default 3s)
+- **Degradación elegante**: Caché → API Primary → API Fallback → Tasas Default
+- **Endpoints**: `convert`, `getExchangeRate`, `getRates`
+
 ### Pricing Service (gRPC - :50051)
 - Calcula precios basados en zonas, servicios y paquetes
 - Implementa peso volumétrico (L×W×H/5000)
@@ -110,6 +122,130 @@ QuetzalShip v2.0 es un sistema de microservicios que permite:
 - Creación de órdenes
 - Lista con paginación
 - Detalle y recibos
+
+## Observabilidad
+
+QuetzalShip incluye un **stack completo de observabilidad** basado en ELK + Grafana:
+
+### Stack de Monitoreo
+
+| Componente | Puerto | Credenciales | Descripción |
+|------------|--------|--------------|-------------|
+| **Grafana** | 3001 | admin / quetzalship | Dashboards y visualización |
+| **Kibana** | 5601 | - | Exploración de logs |
+| **Elasticsearch** | 9200 | - | Almacenamiento de logs |
+| **Logstash** | 12201/udp | - | Procesamiento de logs |
+
+### Features de Observabilidad
+
+✅ **Correlation ID:** Rastreo end-to-end de requests  
+✅ **Logs Estructurados:** Formato JSON para análisis  
+✅ **Dashboards:** Visualización en tiempo real  
+✅ **Filtros Avanzados:** Por servicio, nivel, correlationId  
+✅ **Alertas:** Monitoreo de errores (configurable)
+
+### Inicio Rápido - Observabilidad
+
+```bash
+# 1. Levantar el stack completo
+docker compose -f docker-compose.local.yml up -d
+
+# 2. Acceder a Grafana
+# URL: http://localhost:3001
+# Usuario: admin
+# Contraseña: quetzalship
+
+# 3. Ir al dashboard "QuetzalShip - Logs Avanzados"
+
+# 4. Generar logs de prueba
+./scripts/generate-test-logs.sh
+# o en Windows:
+.\scripts\generate-test-logs.ps1
+```
+
+### Dashboards Disponibles
+
+**Dashboard Principal:** "QuetzalShip - Logs Avanzados"
+
+- 📊 **Errores Totales:** Contador en tiempo real
+- 📈 **Logs por Nivel:** Gráfico temporal (info/warn/error)
+- 🔥 **Errores por Servicio:** Distribución de errores
+- 🥧 **Distribución:** Porcentaje por servicio
+- 📝 **Logs Recientes:** Vista detallada con búsqueda
+
+### Filtros de Dashboard
+
+En el dashboard "QuetzalShip - Logs Avanzados", ahora puedes **filtrar logs por Correlation ID**:
+
+#### Cómo Filtrar Logs
+
+1. **Obtén un Correlation ID:**
+   ```powershell
+   # Ejecuta este script para hacer un request
+   .\scripts\get-correlation-id.ps1
+   # El Correlation ID se copia automáticamente al portapapeles
+   ```
+
+2. **Ve a Grafana:** http://localhost:3001
+
+3. **Pega el Correlation ID** en el campo de texto en la parte superior del dashboard
+
+4. **Ver resultados:** El panel "Logs Recientes (Filtrados)" mostrará **solo los logs de ese request**
+
+#### Ejemplos de Filtros
+
+| Query | Resultado |
+|-------|-----------|
+| `correlationId:"31f9fbe5-27b8-4566-87f8-a7724a86664e"` | Todos los logs de ese request |
+| `correlationId:"31f9fbe5..." AND logLevel:error` | Solo errores de ese request |
+| `correlationId:"31f9fbe5..." AND serviceName:gateway` | Solo logs del Gateway |
+| *(campo vacío)* | Todos los logs (sin filtro) |
+
+📖 **Guía completa de filtrado:** [docs/GRAFANA_FILTER_GUIDE.md](docs/GRAFANA_FILTER_GUIDE.md)
+
+### Rastreo de Requests
+
+Cada request al Gateway recibe un `X-Correlation-ID`:
+
+```bash
+# Request
+curl -v http://localhost:3000/api/v1/orders/...
+
+# Response incluye:
+# X-Correlation-ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+Para rastrear el request completo:
+1. Copiar el Correlation ID del header
+2. Ir a Grafana → Dashboard
+3. Pegar el ID en el filtro "Correlation ID"
+4. Ver todos los logs relacionados
+
+### Documentación Completa
+
+#### Observabilidad
+📚 **Guía de observabilidad completa:** [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)  
+🎯 **Cómo filtrar logs en Grafana:** [docs/GRAFANA_FILTER_GUIDE.md](docs/GRAFANA_FILTER_GUIDE.md)  
+🔍 **Cómo obtener Correlation ID:** [docs/CORRELATION_ID_GUIDE.md](docs/CORRELATION_ID_GUIDE.md)  
+📊 **Resumen técnico:** [docs/OBSERVABILITY_SUMMARY.md](docs/OBSERVABILITY_SUMMARY.md)
+
+#### Servicio FX (Conversión de Moneda)
+🔍 **Guía de validación FX (Backend):** [docs/FX_SERVICE_VALIDATION.md](docs/FX_SERVICE_VALIDATION.md)  
+🎨 **Validación desde Frontend:** [docs/FX_FRONTEND_VALIDATION.md](docs/FX_FRONTEND_VALIDATION.md)
+
+**Pruebas rápidas:**
+```powershell
+# Validar características del backend (CLI)
+.\scripts\validate-fx-service.ps1
+
+# Probar resiliencia (circuit breaker, retries, degradación)
+.\scripts\test-fx-resilience.ps1
+
+# Validar desde la UI
+# 1. Levantar servicios: docker-compose -f docker-compose.dev.yml up -d
+# 2. Ir a: http://localhost:4200/currency
+# 3. Probar conversiones, caché, circuit breaker desde la interfaz
+```
 
 ## Requisitos
 
@@ -324,7 +460,7 @@ curl -X POST http://localhost:3000/api/v1/orders \
 
 ## Pruebas
 
-### Ejecutar tests unitarios
+### Pruebas Unitarias
 
 ```bash
 # Pricing Service
@@ -348,6 +484,33 @@ npm run test:cov
 - Validación peso <= 0
 - Validación dimensiones <= 0
 - Peso volumétrico > peso real
+
+### Pruebas de Carga con Locust 🚀
+
+El proyecto incluye pruebas de carga automatizadas con [Locust](https://locust.io/):
+
+```bash
+# Instalación
+cd tests/load
+pip install -r requirements.txt
+
+# Ejecución con UI
+locust -f locustfile.py --host http://localhost:3000
+# Abrir navegador en: http://localhost:8089
+
+# Ejecución rápida (headless)
+./run-locust.ps1 -TestType quick -GenerateReport        # Windows
+./run-locust.sh -t quick -g                              # Linux/Mac
+```
+
+**Tipos de pruebas disponibles:**
+- `quick`: 50 usuarios, 1 minuto (validación)
+- `normal`: 100 usuarios, 10 minutos (carga normal)
+- `stress`: 300 usuarios, 5 minutos (estrés)
+- `spike`: 500 usuarios, 2 minutos (picos)
+- `soak`: 50 usuarios, 2 horas (resistencia)
+
+**Documentación completa:** [docs/LOCUST_LOAD_TESTING.md](docs/LOCUST_LOAD_TESTING.md)
 
 ## Idempotencia
 

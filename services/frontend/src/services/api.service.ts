@@ -6,6 +6,14 @@ import {
   CancelOrderResponse,
 } from '../types';
 import { ReceiptResponse } from '../types/receipt.types';
+import {
+  ConvertRequest,
+  ConvertResponse,
+  ExchangeRateRequest,
+  ExchangeRateResponse,
+  GetRatesRequest,
+  GetRatesResponse,
+} from '../types/fx.types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -56,5 +64,39 @@ export const apiService = {
   async getReceipt(orderId: string): Promise<ReceiptResponse> {
     const response = await fetch(`${API_BASE_URL}/v1/orders/${orderId}/receipt`);
     return handleResponse<ReceiptResponse>(response);
+  },
+
+  // FX Service methods
+  async convertCurrency(request: ConvertRequest): Promise<ConvertResponse> {
+    const response = await fetch(`${API_BASE_URL}/v1/fx/convert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ConvertResponse>(response);
+  },
+
+  async getExchangeRate(request: ExchangeRateRequest): Promise<ExchangeRateResponse> {
+    const response = await fetch(`${API_BASE_URL}/v1/fx/rate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<ExchangeRateResponse>(response);
+  },
+
+  async getRates(request: GetRatesRequest): Promise<GetRatesResponse> {
+    const response = await fetch(`${API_BASE_URL}/v1/fx/rates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<GetRatesResponse>(response);
   },
 };

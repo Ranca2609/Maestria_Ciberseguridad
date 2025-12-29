@@ -1,0 +1,457 @@
+# Grafana ConfigMap for Datasources
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: quetzalship
+  labels:
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Elasticsearch
+        type: elasticsearch
+        url: http://elasticsearch-service:9200
+        access: proxy
+        database: "quetzalship-logs-*"
+        isDefault: true
+        jsonData:
+          timeField: "@timestamp"
+          esVersion: "8.0.0"
+          logMessageField: message
+          logLevelField: logLevel
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: quetzalship
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards
+---
+# Grafana Logs Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-logs
+  namespace: quetzalship
+data:
+  logs-dashboard.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "content": "# QuetzalShip Logs Dashboard\n\nUse the filters above to search by **correlationId**, **service**, or **log level**.",
+            "mode": "markdown"
+          },
+          "title": "",
+          "type": "text"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 0,
+            "y": 4
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["count"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "query": "logLevel:ERROR",
+              "refId": "A",
+              "metrics": [{"type": "count"}],
+              "bucketAggs": []
+            }
+          ],
+          "title": "Error Count",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 8,
+            "y": 4
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["count"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "query": "logLevel:WARN",
+              "refId": "A",
+              "metrics": [{"type": "count"}],
+              "bucketAggs": []
+            }
+          ],
+          "title": "Warning Count",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 16,
+            "y": 4
+          },
+          "id": 4,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["count"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "query": "*",
+              "refId": "A",
+              "metrics": [{"type": "count"}],
+              "bucketAggs": []
+            }
+          ],
+          "title": "Total Logs",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "id": 5,
+          "options": {},
+          "targets": [
+            {
+              "query": "*",
+              "refId": "A",
+              "metrics": [{"type": "count"}],
+              "bucketAggs": [
+                {
+                  "type": "terms",
+                  "field": "serviceName.keyword",
+                  "settings": {"size": "10"}
+                }
+              ]
+            }
+          ],
+          "title": "Logs by Service",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 10
+          },
+          "id": 6,
+          "options": {},
+          "targets": [
+            {
+              "query": "*",
+              "refId": "A",
+              "metrics": [{"type": "count"}],
+              "bucketAggs": [
+                {
+                  "type": "terms",
+                  "field": "logLevel.keyword",
+                  "settings": {"size": "10"}
+                }
+              ]
+            }
+          ],
+          "title": "Logs by Level",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "elasticsearch",
+            "uid": "elasticsearch"
+          },
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 18
+          },
+          "id": 7,
+          "options": {
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true,
+            "enableLogDetails": true
+          },
+          "targets": [
+            {
+              "query": "*",
+              "refId": "A",
+              "metrics": [{"type": "logs"}],
+              "bucketAggs": []
+            }
+          ],
+          "title": "Log Stream",
+          "type": "logs"
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["quetzalship", "logs"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "elasticsearch"
+            },
+            "definition": "",
+            "name": "correlationId",
+            "options": [],
+            "query": "",
+            "refresh": 1,
+            "regex": "",
+            "type": "textbox"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "elasticsearch"
+            },
+            "definition": "{\"find\": \"terms\", \"field\": \"serviceName.keyword\"}",
+            "name": "service",
+            "options": [],
+            "query": "{\"find\": \"terms\", \"field\": \"serviceName.keyword\"}",
+            "refresh": 1,
+            "type": "query"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "elasticsearch"
+            },
+            "definition": "{\"find\": \"terms\", \"field\": \"logLevel.keyword\"}",
+            "name": "level",
+            "options": [],
+            "query": "{\"find\": \"terms\", \"field\": \"logLevel.keyword\"}",
+            "refresh": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "title": "QuetzalShip Logs",
+      "uid": "quetzalship-logs",
+      "version": 1,
+      "weekStart": ""
+    }
+---
+# Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: quetzalship
+  labels:
+    app: grafana
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        tier: observability
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "quetzalship"
+            - name: GF_INSTALL_PLUGINS
+              value: ""
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-dashboard-logs
+              mountPath: /var/lib/grafana/dashboards
+          livenessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboards-config
+          configMap:
+            name: grafana-dashboards-config
+        - name: grafana-dashboard-logs
+          configMap:
+            name: grafana-dashboard-logs
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: quetzalship
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: grafana

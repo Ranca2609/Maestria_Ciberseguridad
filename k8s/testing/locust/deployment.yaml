@@ -1,0 +1,208 @@
+# Locust ConfigMap with test script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-config
+  namespace: quetzalship
+data:
+  locustfile.py: |
+    from locust import HttpUser, task, between
+    import random
+    import uuid
+
+    class QuetzalShipUser(HttpUser):
+        """Load test user for QuetzalShip API"""
+        wait_time = between(1, 3)
+        
+        @task(3)
+        def create_order(self):
+            """Create a new shipping order"""
+            self.client.post("/api/v1/orders", 
+                headers={
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": str(uuid.uuid4()),
+                    "X-Correlation-ID": str(uuid.uuid4())
+                },
+                json={
+                    "clientName": f"Load Test User {random.randint(1, 1000)}",
+                    "originZone": random.choice(["METRO", "INTERIOR", "FRONTERA"]),
+                    "destinationZone": random.choice(["METRO", "INTERIOR", "FRONTERA"]),
+                    "serviceType": random.choice(["STANDARD", "EXPRESS", "SAME_DAY"]),
+                    "packages": [{
+                        "weightKg": round(random.uniform(1, 50), 2),
+                        "heightCm": random.randint(10, 100),
+                        "widthCm": random.randint(10, 100),
+                        "lengthCm": random.randint(10, 100),
+                        "fragile": random.choice([True, False]),
+                        "declaredValueQ": random.randint(100, 10000)
+                    }],
+                    "insuranceEnabled": random.choice([True, False])
+                },
+                name="/api/v1/orders [POST]"
+            )
+        
+        @task(5)
+        def list_orders(self):
+            """List orders with pagination"""
+            page = random.randint(1, 5)
+            self.client.get(f"/api/v1/orders?page={page}&pageSize=10",
+                headers={"X-Correlation-ID": str(uuid.uuid4())},
+                name="/api/v1/orders [GET]"
+            )
+        
+        @task(2)
+        def health_check(self):
+            """Check service health"""
+            self.client.get("/health", name="/health")
+        
+        @task(1)
+        def get_fx_rate(self):
+            """Get exchange rate"""
+            currencies = ["GTQ", "EUR", "MXN", "GBP"]
+            to_currency = random.choice(currencies)
+            self.client.get(f"/api/v1/fx/rates?from=USD&to={to_currency}",
+                headers={"X-Correlation-ID": str(uuid.uuid4())},
+                name="/api/v1/fx/rates [GET]"
+            )
+
+        def on_start(self):
+            """Setup before starting tests"""
+            # Warm up with a health check
+            self.client.get("/health")
+---
+# Locust Master Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-master
+  namespace: quetzalship
+  labels:
+    app: locust
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+      role: master
+  template:
+    metadata:
+      labels:
+        app: locust
+        role: master
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:2.20
+          ports:
+            - containerPort: 8089
+              name: web
+            - containerPort: 5557
+              name: master
+          args:
+            - --master
+            - -f
+            - /mnt/locust/locustfile.py
+            - --host
+            - http://gateway-service:3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: locust-config
+              mountPath: /mnt/locust
+      volumes:
+        - name: locust-config
+          configMap:
+            name: locust-config
+---
+# Locust Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker
+  namespace: quetzalship
+  labels:
+    app: locust
+    role: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: locust
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: locust
+        role: worker
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:2.20
+          args:
+            - --worker
+            - --master-host
+            - locust-master
+            - -f
+            - /mnt/locust/locustfile.py
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: locust-config
+              mountPath: /mnt/locust
+      volumes:
+        - name: locust-config
+          configMap:
+            name: locust-config
+---
+# Locust Master Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master
+  namespace: quetzalship
+  labels:
+    app: locust
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8089
+      targetPort: 8089
+      name: web
+    - port: 5557
+      targetPort: 5557
+      name: master
+  selector:
+    app: locust
+    role: master
+---
+# Locust Web UI Ingress (optional - for accessing Locust UI)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: locust-ingress
+  namespace: quetzalship
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: locust.quetzalship.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: locust-master
+                port:
+                  number: 8089

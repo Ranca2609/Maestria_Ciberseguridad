@@ -1,0 +1,107 @@
+# MSSQL Server PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mssql-data-pvc
+  namespace: quetzalship
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard  # Use 'standard-rwo' for GKE or adjust as needed
+---
+# MSSQL Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mssql
+  namespace: quetzalship
+  labels:
+    app: mssql
+    tier: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mssql
+  strategy:
+    type: Recreate  # Required for single-instance database with PVC
+  template:
+    metadata:
+      labels:
+        app: mssql
+        tier: database
+    spec:
+      containers:
+        - name: mssql
+          image: mcr.microsoft.com/mssql/server:2022-latest
+          ports:
+            - containerPort: 1433
+              name: mssql
+          env:
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: MSSQL_SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mssql-secret
+                  key: SA_PASSWORD
+            - name: MSSQL_PID
+              value: "Developer"  # Use Express for free, Developer for dev
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          volumeMounts:
+            - name: mssql-data
+              mountPath: /var/opt/mssql
+          livenessProbe:
+            tcpSocket:
+              port: 1433
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /opt/mssql-tools18/bin/sqlcmd
+                - -S
+                - localhost
+                - -U
+                - sa
+                - -P
+                - $(MSSQL_SA_PASSWORD)
+                - -Q
+                - "SELECT 1"
+                - -C
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: mssql-data
+          persistentVolumeClaim:
+            claimName: mssql-data-pvc
+---
+# MSSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mssql-service
+  namespace: quetzalship
+  labels:
+    app: mssql
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1433
+      targetPort: 1433
+      name: mssql
+  selector:
+    app: mssql

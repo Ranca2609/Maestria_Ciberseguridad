@@ -52,7 +52,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        service: [pricing, orders, receipt, gateway]
+        service: [pricing, orders, receipt, gateway, fx]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

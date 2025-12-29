@@ -1,0 +1,326 @@
+# Docker Compose for LOCAL development and testing
+# This includes the full stack: MSSQL, Redis, ELK, microservices
+# Run with: docker compose -f docker-compose.local.yml up --build
+
+services:
+  # ==================== DATA LAYER ====================
+  
+  # MS SQL Server
+  mssql:
+    # image: mcr.microsoft.com/mssql/server:2022-latest
+    build:
+      context: ./docker/mssql
+      dockerfile: Dockerfile
+    container_name: quetzalship-mssql
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=QuetzalShip2024!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    networks:
+      - quetzalship-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "QuetzalShip2024!" -Q "SELECT 1" -C || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: quetzalship-redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - quetzalship-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==================== OBSERVABILITY ====================
+  
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: quetzalship-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=quetzalship-logs
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - quetzalship-network
+    healthcheck:
+      test: curl -sf http://localhost:9200/_cluster/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Logstash
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: quetzalship-logstash
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+      - "12201:12201/udp"
+    volumes:
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./docker/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: quetzalship-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: quetzalship-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=quetzalship
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+
+  # ==================== MICROSERVICES ====================
+
+  # Pricing Service
+  pricing:
+    build:
+      context: .
+      dockerfile: services/pricing/Dockerfile
+    container_name: quetzalship-pricing
+    environment:
+      - NODE_ENV=development
+      - GRPC_PORT=50051
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    networks:
+      - quetzalship-network
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://host.docker.internal:12201"
+        tag: "pricing"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50051, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Orders Service
+  orders:
+    build:
+      context: .
+      dockerfile: services/orders/Dockerfile
+    container_name: quetzalship-orders
+    environment:
+      - NODE_ENV=development
+      - GRPC_PORT=50052
+      - PRICING_SERVICE_URL=pricing:50051
+      - DATABASE_URL=mssql://sa:QuetzalShip2024!@mssql:1433/quetzalship
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    depends_on:
+      pricing:
+        condition: service_healthy
+      mssql:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://host.docker.internal:12201"
+        tag: "orders"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50052, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Receipt Service
+  receipt:
+    build:
+      context: .
+      dockerfile: services/receipt/Dockerfile
+    container_name: quetzalship-receipt
+    environment:
+      - NODE_ENV=development
+      - GRPC_PORT=50054
+    ports:
+      - "50054:50054"
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    networks:
+      - quetzalship-network
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://host.docker.internal:12201"
+        tag: "receipt"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50054, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FX Service (NEW)
+  fx:
+    build:
+      context: .
+      dockerfile: services/fx/Dockerfile
+    container_name: quetzalship-fx
+    environment:
+      - NODE_ENV=development
+      - GRPC_PORT=50055
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_TTL_SECONDS=300
+      - FX_PRIMARY_API_URL=https://v6.exchangerate-api.com/v6
+      - FX_FALLBACK_API_URL=https://api.freecurrencyapi.com/v1
+      - FX_PRIMARY_API_KEY=${FX_PRIMARY_API_KEY:-demo}
+      - FX_FALLBACK_API_KEY=${FX_FALLBACK_API_KEY:-demo}
+      - FX_API_TIMEOUT_MS=5000
+      - CB_TIMEOUT_MS=3000
+      - CB_ERROR_THRESHOLD=50
+      - CB_RESET_TIMEOUT_MS=30000
+    ports:
+      - "50055:50055"
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').createConnection(50055, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Gateway
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    container_name: quetzalship-gateway
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - ORDERS_SERVICE_URL=orders:50052
+      - RECEIPT_SERVICE_URL=receipt:50054
+      - FX_SERVICE_URL=fx:50055
+      - GRPC_TIMEOUT_MS=2000
+      - CORS_ORIGIN=*
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./contracts/proto:/app/proto:ro
+    depends_on:
+      orders:
+        condition: service_healthy
+      receipt:
+        condition: service_healthy
+      fx:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+    logging:
+      driver: gelf
+      options:
+        gelf-address: "udp://host.docker.internal:12201"
+        tag: "gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:3000
+    container_name: quetzalship-frontend
+    ports:
+      - "4200:4200"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+
+  # ==================== TESTING ====================
+
+  # Locust for Load Testing
+  locust:
+    image: locustio/locust:latest
+    container_name: quetzalship-locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./tests/load:/mnt/locust:ro
+    command: -f /mnt/locust/locustfile.py --host http://gateway:3000
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - quetzalship-network
+
+networks:
+  quetzalship-network:
+    driver: bridge
+    name: quetzalship-network
+
+volumes:
+  mssql-data:
+  elasticsearch-data:
+  grafana-data:

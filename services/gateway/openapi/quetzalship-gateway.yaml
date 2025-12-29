@@ -1,0 +1,599 @@
+openapi: 3.0.3
+info:
+  title: QuetzalShip Gateway API
+  description: |
+    API Gateway para el sistema de envíos QuetzalShip.
+    Proporciona endpoints REST para gestión de órdenes, cálculo de precios y generación de recibos.
+  version: 1.0.0
+  contact:
+    name: QuetzalShip Team
+    email: support@quetzalship.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo local
+  - url: https://api.quetzalship.com
+    description: Servidor de producción
+
+tags:
+  - name: Orders
+    description: Operaciones de gestión de órdenes
+  - name: Health
+    description: Endpoints de monitoreo y salud del servicio
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Verifica el estado de salud del servicio gateway y sus dependencias
+      operationId: healthCheck
+      responses:
+        '200':
+          description: El servicio está funcionando correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+
+  /v1/orders:
+    post:
+      tags:
+        - Orders
+      summary: Crear una nueva orden
+      description: Crea una nueva orden de envío con los paquetes y parámetros especificados
+      operationId: createOrder
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Clave de idempotencia para evitar duplicados
+          required: false
+          schema:
+            type: string
+            example: 'unique-key-12345'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Orden creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+        '400':
+          description: Datos de entrada inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicto de idempotencia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Servicio no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Orders
+      summary: Listar órdenes
+      description: Obtiene una lista paginada de todas las órdenes
+      operationId: listOrders
+      parameters:
+        - name: page
+          in: query
+          description: Número de página (default 1)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Tamaño de página (default 20, max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Lista de órdenes obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOrdersResponse'
+
+  /v1/orders/{orderId}:
+    get:
+      tags:
+        - Orders
+      summary: Obtener detalle de una orden
+      description: Obtiene el detalle completo de una orden específica
+      operationId: getOrder
+      parameters:
+        - name: orderId
+          in: path
+          description: ID único de la orden
+          required: true
+          schema:
+            type: string
+            example: 'ord_abc123def456'
+      responses:
+        '200':
+          description: Detalle de la orden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '404':
+          description: Orden no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/orders/{orderId}/cancel:
+    post:
+      tags:
+        - Orders
+      summary: Cancelar una orden
+      description: Cancela una orden existente que esté activa
+      operationId: cancelOrder
+      parameters:
+        - name: orderId
+          in: path
+          description: ID único de la orden
+          required: true
+          schema:
+            type: string
+            example: 'ord_abc123def456'
+      responses:
+        '200':
+          description: Orden cancelada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelOrderResponse'
+        '404':
+          description: Orden no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La orden ya está cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/orders/{orderId}/receipt:
+    get:
+      tags:
+        - Orders
+      summary: Obtener recibo de una orden
+      description: Genera y obtiene el recibo de una orden existente
+      operationId: getReceipt
+      parameters:
+        - name: orderId
+          in: path
+          description: ID único de la orden
+          required: true
+          schema:
+            type: string
+            example: 'ord_abc123def456'
+      responses:
+        '200':
+          description: Recibo generado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+        '404':
+          description: Orden no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    # Enums
+    Zone:
+      type: string
+      enum:
+        - METRO
+        - INTERIOR
+        - FRONTERA
+      description: Zona geográfica de origen o destino
+
+    ServiceType:
+      type: string
+      enum:
+        - STANDARD
+        - EXPRESS
+        - SAME_DAY
+      description: Tipo de servicio de envío
+
+    DiscountType:
+      type: string
+      enum:
+        - NONE
+        - PERCENT
+        - FIXED
+      description: Tipo de descuento aplicado
+
+    OrderStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - CANCELLED
+      description: Estado de la orden
+
+    ReceiptFormat:
+      type: string
+      enum:
+        - PDF
+        - HTML
+        - TEXT
+      description: Formato del recibo generado
+
+    # Request/Response DTOs
+    Package:
+      type: object
+      required:
+        - weightKg
+        - heightCm
+        - widthCm
+        - lengthCm
+        - fragile
+        - declaredValueQ
+      properties:
+        weightKg:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 5.5
+          description: Peso del paquete en kilogramos
+        heightCm:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 30
+          description: Altura del paquete en centímetros
+        widthCm:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 20
+          description: Ancho del paquete en centímetros
+        lengthCm:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 15
+          description: Largo del paquete en centímetros
+        fragile:
+          type: boolean
+          example: false
+          description: Indica si el paquete es frágil
+        declaredValueQ:
+          type: number
+          format: float
+          minimum: 0
+          example: 500
+          description: Valor declarado del paquete en Quetzales
+
+    Discount:
+      type: object
+      required:
+        - type
+        - value
+      properties:
+        type:
+          $ref: '#/components/schemas/DiscountType'
+        value:
+          type: number
+          format: float
+          minimum: 0
+          example: 10
+          description: Valor del descuento (porcentaje o monto fijo)
+
+    Breakdown:
+      type: object
+      properties:
+        orderBillableKg:
+          type: number
+          format: float
+          description: Peso facturable total de la orden
+        baseSubtotal:
+          type: number
+          format: float
+          description: Subtotal base
+        serviceSubtotal:
+          type: number
+          format: float
+          description: Subtotal del servicio
+        fragileSurcharge:
+          type: number
+          format: float
+          description: Recargo por paquetes frágiles
+        insuranceSurcharge:
+          type: number
+          format: float
+          description: Recargo por seguro
+        subtotalWithSurcharges:
+          type: number
+          format: float
+          description: Subtotal con recargos
+        discountAmount:
+          type: number
+          format: float
+          description: Monto de descuento aplicado
+        total:
+          type: number
+          format: float
+          description: Total final
+        ratePerKg:
+          type: number
+          format: float
+          description: Tarifa por kilogramo
+        serviceMultiplier:
+          type: number
+          format: float
+          description: Multiplicador del servicio
+        fragilePackagesCount:
+          type: integer
+          description: Cantidad de paquetes frágiles
+        declaredValueTotal:
+          type: number
+          format: float
+          description: Valor declarado total
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - originZone
+        - destinationZone
+        - serviceType
+        - packages
+        - insuranceEnabled
+      properties:
+        originZone:
+          $ref: '#/components/schemas/Zone'
+        destinationZone:
+          $ref: '#/components/schemas/Zone'
+        serviceType:
+          $ref: '#/components/schemas/ServiceType'
+        packages:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Package'
+          description: Lista de paquetes a enviar
+        discount:
+          $ref: '#/components/schemas/Discount'
+        insuranceEnabled:
+          type: boolean
+          example: false
+          description: Indica si se habilita el seguro
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          example: 'ord_abc123def456'
+          description: ID único de la orden creada
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+          description: Fecha y hora de creación
+        breakdown:
+          $ref: '#/components/schemas/Breakdown'
+        total:
+          type: number
+          format: float
+          example: 150.50
+          description: Total de la orden
+
+    OrderSummary:
+      type: object
+      properties:
+        orderId:
+          type: string
+          example: 'ord_abc123def456'
+        destinationZone:
+          $ref: '#/components/schemas/Zone'
+        serviceType:
+          $ref: '#/components/schemas/ServiceType'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        total:
+          type: number
+          format: float
+          example: 150.50
+        createdAt:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+
+    ListOrdersResponse:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSummary'
+          description: Lista de órdenes
+        totalCount:
+          type: integer
+          example: 42
+          description: Total de órdenes
+        page:
+          type: integer
+          example: 1
+          description: Página actual
+        pageSize:
+          type: integer
+          example: 20
+          description: Tamaño de página
+
+    OrderDetail:
+      type: object
+      properties:
+        orderId:
+          type: string
+          example: 'ord_abc123def456'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+        originZone:
+          $ref: '#/components/schemas/Zone'
+        destinationZone:
+          $ref: '#/components/schemas/Zone'
+        serviceType:
+          $ref: '#/components/schemas/ServiceType'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Package'
+        discount:
+          $ref: '#/components/schemas/Discount'
+        insuranceEnabled:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        breakdown:
+          $ref: '#/components/schemas/Breakdown'
+        total:
+          type: number
+          format: float
+
+    CancelOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          example: 'ord_abc123def456'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        cancelledAt:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+
+    ReceiptMeta:
+      type: object
+      properties:
+        totalAmount:
+          type: number
+          format: float
+          example: 150.50
+        currency:
+          type: string
+          example: 'Q'
+      additionalProperties: true
+
+    Receipt:
+      type: object
+      properties:
+        receiptId:
+          type: string
+          example: 'rcpt_1734825607_abc123'
+          description: ID único del recibo
+        orderId:
+          type: string
+          example: 'ord_abc123def456'
+          description: ID de la orden asociada
+        generatedAt:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+          description: Fecha y hora de generación
+        status:
+          type: integer
+          description: 'Estado del recibo: 0=DRAFT, 1=GENERATED, 2=ERROR'
+          example: 1
+        content:
+          type: string
+          description: Contenido del recibo (base64 PDF, HTML, o texto plano)
+          example: 'JVBERi0xLjQKJcOkw7zDtsO4...'
+        format:
+          $ref: '#/components/schemas/ReceiptFormat'
+        version:
+          type: string
+          example: '1.0'
+          description: Versión del formato del recibo
+        meta:
+          $ref: '#/components/schemas/ReceiptMeta'
+
+    HealthCheckResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: 'ok'
+          description: Estado general del servicio
+        timestamp:
+          type: string
+          format: date-time
+          example: '2025-12-21T12:34:56Z'
+          description: Timestamp del health check
+        services:
+          type: object
+          properties:
+            orders:
+              type: string
+              example: 'healthy'
+            pricing:
+              type: string
+              example: 'healthy'
+            receipt:
+              type: string
+              example: 'healthy'
+          description: Estado de los servicios dependientes
+
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+          description: Código de estado HTTP
+        message:
+          type: string
+          example: 'Datos de entrada inválidos'
+          description: Mensaje de error
+        error:
+          type: string
+          example: 'Bad Request'
+          description: Tipo de error
+        details:
+          type: array
+          items:
+            type: string
+          description: Detalles adicionales del error
+          example:
+            - 'packages debe contener al menos 1 elemento'
+            - 'originZone es requerido'

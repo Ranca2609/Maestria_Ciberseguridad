@@ -21,9 +21,11 @@ import {
   Zone,
   ServiceType,
   IPackage,
-  IDiscount
+  IDiscount,
+  IOrderRepository,
 } from '../interfaces/order.interface';
-import { InMemoryOrderRepository, InMemoryIdempotencyStore } from '../repositories/index';
+import { InMemoryIdempotencyStore } from '../repositories/index';
+import { ORDER_REPOSITORY } from '../constants';
 
 // Interface para el cliente de Pricing Service
 interface PricingServiceClient {
@@ -45,7 +47,7 @@ export class OrderService implements OnModuleInit {
 
   constructor(
     @Inject('PRICING_PACKAGE') private readonly pricingClient: ClientGrpc,
-    private readonly orderRepository: InMemoryOrderRepository,
+    @Inject(ORDER_REPOSITORY) private readonly orderRepository: IOrderRepository,
     private readonly idempotencyStore: InMemoryIdempotencyStore,
   ) {}
 
@@ -131,7 +133,7 @@ export class OrderService implements OnModuleInit {
       total: breakdown.total,
     };
 
-    this.orderRepository.save(order);
+    await this.orderRepository.save(order);
 
     const response: ICreateOrderResponse = {
       orderId,
@@ -157,8 +159,8 @@ export class OrderService implements OnModuleInit {
     return response;
   }
 
-  listOrders(request: IListOrdersRequest): IListOrdersResponse {
-    const allOrders = this.orderRepository.findAll();
+  async listOrders(request: IListOrdersRequest): Promise<IListOrdersResponse> {
+    const allOrders = await this.orderRepository.findAll();
     const page = request.page || 1;
     const pageSize = Math.min(request.pageSize || 20, 100);
 
@@ -186,8 +188,8 @@ export class OrderService implements OnModuleInit {
     };
   }
 
-  getOrder(request: IGetOrderRequest): IGetOrderResponse {
-    const order = this.orderRepository.findById(request.orderId);
+  async getOrder(request: IGetOrderRequest): Promise<IGetOrderResponse> {
+    const order = await this.orderRepository.findById(request.orderId);
 
     if (!order) {
       throw {
@@ -199,8 +201,8 @@ export class OrderService implements OnModuleInit {
     return { order };
   }
 
-  cancelOrder(request: ICancelOrderRequest): ICancelOrderResponse {
-    const order = this.orderRepository.findById(request.orderId);
+  async cancelOrder(request: ICancelOrderRequest): Promise<ICancelOrderResponse> {
+    const order = await this.orderRepository.findById(request.orderId);
 
     if (!order) {
       throw {
@@ -220,7 +222,7 @@ export class OrderService implements OnModuleInit {
     order.status = OrderStatus.STATUS_CANCELLED;
     order.cancelledAt = cancelledAt;
 
-    this.orderRepository.update(order);
+    await this.orderRepository.update(order);
 
     return {
       orderId: order.orderId,
@@ -229,8 +231,8 @@ export class OrderService implements OnModuleInit {
     };
   }
 
-  getOrderForReceipt(request: IGetOrderForReceiptRequest): IGetOrderForReceiptResponse {
-    const order = this.orderRepository.findById(request.orderId);
+  async getOrderForReceipt(request: IGetOrderForReceiptRequest): Promise<IGetOrderForReceiptResponse> {
+    const order = await this.orderRepository.findById(request.orderId);
 
     if (!order) {
       throw {

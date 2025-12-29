@@ -1,0 +1,157 @@
+# Logstash ConfigMap with pipeline
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: quetzalship
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    xpack.monitoring.enabled: false
+  
+  logstash.conf: |
+    input {
+      beats {
+        port => 5044
+      }
+    }
+    
+    filter {
+      # Parse JSON logs
+      if [message] =~ /^\{/ {
+        json {
+          source => "message"
+          target => "parsed"
+        }
+        
+        # Extract key fields to top level
+        if [parsed][correlationId] {
+          mutate {
+            add_field => { "correlationId" => "%{[parsed][correlationId]}" }
+          }
+        }
+        
+        if [parsed][service] {
+          mutate {
+            add_field => { "serviceName" => "%{[parsed][service]}" }
+          }
+        }
+        
+        if [parsed][level] {
+          mutate {
+            add_field => { "logLevel" => "%{[parsed][level]}" }
+          }
+        }
+      }
+      
+      # Add kubernetes metadata
+      if [kubernetes][pod][name] {
+        mutate {
+          add_field => { "podName" => "%{[kubernetes][pod][name]}" }
+        }
+      }
+      
+      if [kubernetes][namespace] {
+        mutate {
+          add_field => { "namespace" => "%{[kubernetes][namespace]}" }
+        }
+      }
+      
+      # Parse timestamp
+      date {
+        match => [ "[parsed][timestamp]", "ISO8601" ]
+        target => "@timestamp"
+      }
+    }
+    
+    output {
+      elasticsearch {
+        hosts => ["http://elasticsearch-service:9200"]
+        index => "quetzalship-logs-%{+YYYY.MM.dd}"
+      }
+      
+      # Debug output (remove in production)
+      # stdout { codec => rubydebug }
+    }
+---
+# Logstash Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: quetzalship
+  labels:
+    app: logstash
+    tier: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+        tier: observability
+    spec:
+      containers:
+        - name: logstash
+          image: docker.elastic.co/logstash/logstash:8.11.0
+          ports:
+            - containerPort: 5044
+              name: beats
+            - containerPort: 9600
+              name: http
+          env:
+            - name: LS_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: logstash-config
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+            - name: logstash-config
+              mountPath: /usr/share/logstash/pipeline/logstash.conf
+              subPath: logstash.conf
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9600
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9600
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: logstash-config
+          configMap:
+            name: logstash-config
+---
+# Logstash Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash-service
+  namespace: quetzalship
+  labels:
+    app: logstash
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5044
+      targetPort: 5044
+      name: beats
+    - port: 9600
+      targetPort: 9600
+      name: http
+  selector:
+    app: logstash

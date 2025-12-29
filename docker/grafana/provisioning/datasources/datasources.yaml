@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: Elasticsearch
+    type: elasticsearch
+    url: http://elasticsearch:9200
+    access: proxy
+    database: "quetzalship-logs-*"
+    isDefault: true
+    jsonData:
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+      logMessageField: message
+      logLevelField: logLevel
+      interval: Daily
+      timeInterval: "10s"
+    uid: elasticsearch

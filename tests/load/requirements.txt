@@ -1,0 +1,14 @@
+# Locust Load Testing Requirements
+# Install with: pip install -r requirements.txt
+
+# Core Locust framework
+locust==2.20.0
+
+# Optional plugins for additional functionality
+locust-plugins==4.4.1
+
+# Required for HTTP requests
+requests==2.31.0
+
+# For better logging and reporting
+colorama==0.4.6

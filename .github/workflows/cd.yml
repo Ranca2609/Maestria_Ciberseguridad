@@ -1,0 +1,311 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: quetzalship-prod
+  GKE_ZONE: us-central1-a
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/quetzalship
+  NAMESPACE: quetzalship
+
+jobs:
+  # Build and push new images
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [pricing, orders, receipt, gateway, frontend, fx]
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          if [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            TAG=$(echo "${{ github.ref }}" | sed 's|refs/heads/release/||')
+          else
+            TAG="main-$SHORT_SHA"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "full_image=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.full_image }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.API_BASE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to GKE
+  deploy:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Extract image tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          if [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            TAG=$(echo "${{ github.ref }}" | sed 's|refs/heads/release/||')
+          else
+            TAG="main-$SHORT_SHA"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Update image tags in manifests
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          
+          # Update all deployment files with new image tag
+          for service in pricing orders receipt gateway frontend fx; do
+            sed -i "s|image: ghcr.io/.*quetzalship-${service}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:${TAG}|g" \
+              k8s/applications/${service}/deployment.yaml
+          done
+
+      - name: Apply Kubernetes manifests
+        run: |
+          # Apply in order: namespace -> secrets -> infra -> observability -> apps -> ingress
+          
+          echo "Applying namespace..."
+          kubectl apply -f k8s/base/namespace.yaml
+          
+          echo "Applying secrets (if they don't exist)..."
+          kubectl apply -f k8s/base/secrets.yaml || true
+          
+          echo "Applying infrastructure..."
+          kubectl apply -f k8s/infrastructure/mssql/
+          kubectl apply -f k8s/infrastructure/redis/
+          
+          echo "Applying observability stack..."
+          kubectl apply -f k8s/observability/elasticsearch/
+          kubectl apply -f k8s/observability/logstash/
+          kubectl apply -f k8s/observability/fluent-bit/
+          kubectl apply -f k8s/observability/kibana/
+          kubectl apply -f k8s/observability/grafana/
+          
+          echo "Applying applications..."
+          kubectl apply -f k8s/applications/pricing/
+          kubectl apply -f k8s/applications/orders/
+          kubectl apply -f k8s/applications/receipt/
+          kubectl apply -f k8s/applications/fx/
+          kubectl apply -f k8s/applications/gateway/
+          kubectl apply -f k8s/applications/frontend/
+          
+          echo "Applying ingress..."
+          kubectl apply -f k8s/ingress.yaml
+
+      - name: Wait for rollout
+        run: |
+          echo "Waiting for deployments to be ready..."
+          kubectl rollout status deployment/pricing -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/orders -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/receipt -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/fx -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/gateway -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/frontend -n ${{ env.NAMESPACE }} --timeout=300s
+
+      - name: Get Ingress IP
+        id: ingress
+        run: |
+          # Wait for ingress to get external IP
+          for i in {1..30}; do
+            IP=$(kubectl get ingress quetzalship-ingress-ip -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+            if [ -n "$IP" ]; then
+              echo "ip=$IP" >> $GITHUB_OUTPUT
+              echo "Ingress IP: $IP"
+              break
+            fi
+            echo "Waiting for Ingress IP... ($i/30)"
+            sleep 10
+          done
+
+  # Smoke tests
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Get Ingress URL
+        id: ingress
+        run: |
+          IP=$(kubectl get ingress quetzalship-ingress-ip -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "url=http://$IP" >> $GITHUB_OUTPUT
+          echo "Testing against: http://$IP"
+
+      - name: Run smoke tests
+        env:
+          INGRESS_URL: ${{ steps.ingress.outputs.url }}
+        run: |
+          chmod +x tests/smoke/smoke-test.sh
+          ./tests/smoke/smoke-test.sh
+
+  # Load tests (optional, can be triggered manually)
+  load-test:
+    name: Load Tests
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Deploy Locust
+        run: |
+          kubectl apply -f k8s/testing/locust/
+
+      - name: Wait for Locust
+        run: |
+          kubectl rollout status deployment/locust-master -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/locust-worker -n ${{ env.NAMESPACE }} --timeout=120s
+
+      - name: Run Load Test
+        run: |
+          # Port forward to Locust master
+          kubectl port-forward svc/locust-master 8089:8089 -n ${{ env.NAMESPACE }} &
+          sleep 5
+          
+          # Start headless load test (100 users, 5 minutes)
+          curl -X POST "http://localhost:8089/swarm" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "user_count=100&spawn_rate=10&host=http://gateway-service:3000"
+          
+          # Wait 5 minutes
+          sleep 300
+          
+          # Stop test and get results
+          curl -X GET "http://localhost:8089/stop"
+          curl -X GET "http://localhost:8089/stats/requests" > locust-results.json
+          
+          cat locust-results.json
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-results
+          path: locust-results.json
+          retention-days: 30
+
+      - name: Cleanup Locust
+        if: always()
+        run: |
+          kubectl delete -f k8s/testing/locust/ || true
+
+  # Rollback job (can be triggered on failure)
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    if: failure()
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Rollback deployments
+        run: |
+          echo "Rolling back all deployments..."
+          for deploy in pricing orders receipt fx gateway frontend; do
+            kubectl rollout undo deployment/$deploy -n ${{ env.NAMESPACE }} || true
+          done
+          
+          echo "Waiting for rollback to complete..."
+          for deploy in pricing orders receipt fx gateway frontend; do
+            kubectl rollout status deployment/$deploy -n ${{ env.NAMESPACE }} --timeout=120s || true
+          done

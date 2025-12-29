@@ -142,12 +142,12 @@ export interface IGetOrderForReceiptResponse {
   order: IOrder;
 }
 
-// Repository interface (DIP)
+// Repository interface (DIP) - async for database support
 export interface IOrderRepository {
-  save(order: IOrder): IOrder;
-  findById(orderId: string): IOrder | null;
-  findAll(): IOrder[];
-  update(order: IOrder): IOrder;
+  save(order: IOrder): Promise<IOrder> | IOrder;
+  findById(orderId: string): Promise<IOrder | null> | IOrder | null;
+  findAll(): Promise<IOrder[]> | IOrder[];
+  update(order: IOrder): Promise<IOrder> | IOrder;
 }
 
 // Idempotency store interface

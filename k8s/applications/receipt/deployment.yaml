@@ -1,0 +1,75 @@
+# Receipt Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: receipt-config
+  namespace: quetzalship
+data:
+  NODE_ENV: "production"
+  GRPC_PORT: "50054"
+---
+# Receipt Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: receipt
+  namespace: quetzalship
+  labels:
+    app: receipt
+    tier: microservice
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: receipt
+  template:
+    metadata:
+      labels:
+        app: receipt
+        tier: microservice
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: receipt
+          image: ghcr.io/ranca2609/quetzalship-receipt:main-latest
+          ports:
+            - containerPort: 50054
+              name: grpc
+          envFrom:
+            - configMapRef:
+                name: receipt-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: 50054
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 50054
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# Receipt Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: receipt-service
+  namespace: quetzalship
+  labels:
+    app: receipt
+spec:
+  type: ClusterIP
+  ports:
+    - port: 50054
+      targetPort: 50054
+      name: grpc
+  selector:
+    app: receipt

@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package fx;
+
+option java_multiple_files = true;
+option java_package = "com.quetzalship.fx";
+option java_outer_classname = "FxProto";
+
+// FX Service - Currency Exchange Rate Service
+service FxService {
+  // Get current exchange rate between two currencies
+  rpc GetExchangeRate(GetExchangeRateRequest) returns (GetExchangeRateResponse);
+  
+  // Convert an amount from one currency to another
+  rpc Convert(ConvertRequest) returns (ConvertResponse);
+  
+  // Get multiple exchange rates for a base currency
+  rpc GetRates(GetRatesRequest) returns (GetRatesResponse);
+  
+  // Health check for the service
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetExchangeRateRequest {
+  string from_currency = 1;  // ISO 4217 currency code (e.g., "USD")
+  string to_currency = 2;    // ISO 4217 currency code (e.g., "GTQ")
+}
+
+message GetExchangeRateResponse {
+  string from_currency = 1;
+  string to_currency = 2;
+  double rate = 3;
+  string provider = 4;       // Which provider was used
+  bool from_cache = 5;       // Whether the rate came from cache
+  string timestamp = 6;      // ISO 8601 timestamp of the rate
+}
+
+message ConvertRequest {
+  string from_currency = 1;
+  string to_currency = 2;
+  double amount = 3;
+}
+
+message ConvertResponse {
+  string from_currency = 1;
+  string to_currency = 2;
+  double original_amount = 3;
+  double converted_amount = 4;
+  double rate = 5;
+  string provider = 6;
+  bool from_cache = 7;
+  string timestamp = 8;
+}
+
+message GetRatesRequest {
+  string base_currency = 1;           // Base currency (e.g., "USD")
+  repeated string target_currencies = 2; // List of target currencies
+}
+
+message GetRatesResponse {
+  string base_currency = 1;
+  map<string, double> rates = 2;      // Map of currency code to rate
+  string provider = 3;
+  bool from_cache = 4;
+  string timestamp = 5;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string primary_provider_status = 2;
+  string fallback_provider_status = 3;
+  string cache_status = 4;
+}

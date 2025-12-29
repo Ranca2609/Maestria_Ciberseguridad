@@ -1,0 +1,126 @@
+# FX Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fx-config
+  namespace: quetzalship
+data:
+  NODE_ENV: "production"
+  GRPC_PORT: "50055"
+  # Redis config
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_TTL_SECONDS: "300"
+  # API config
+  FX_PRIMARY_API_URL: "https://v6.exchangerate-api.com/v6"
+  FX_FALLBACK_API_URL: "https://api.freecurrencyapi.com/v1"
+  FX_API_TIMEOUT_MS: "5000"
+  FX_MAX_RETRIES: "2"
+  # Circuit breaker config
+  CB_TIMEOUT_MS: "3000"
+  CB_ERROR_THRESHOLD: "50"
+  CB_RESET_TIMEOUT_MS: "30000"
+  CB_VOLUME_THRESHOLD: "5"
+---
+# FX Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fx
+  namespace: quetzalship
+  labels:
+    app: fx
+    tier: microservice
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fx
+  template:
+    metadata:
+      labels:
+        app: fx
+        tier: microservice
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: fx
+          image: ghcr.io/ranca2609/quetzalship-fx:main-latest
+          ports:
+            - containerPort: 50055
+              name: grpc
+          envFrom:
+            - configMapRef:
+                name: fx-config
+          env:
+            - name: FX_PRIMARY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fx-api-secret
+                  key: FX_PRIMARY_API_KEY
+            - name: FX_FALLBACK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fx-api-secret
+                  key: FX_FALLBACK_API_KEY
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: 50055
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 50055
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+# FX Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: fx-service
+  namespace: quetzalship
+  labels:
+    app: fx
+spec:
+  type: ClusterIP
+  ports:
+    - port: 50055
+      targetPort: 50055
+      name: grpc
+  selector:
+    app: fx
+---
+# FX Service HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fx-hpa
+  namespace: quetzalship
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fx
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
