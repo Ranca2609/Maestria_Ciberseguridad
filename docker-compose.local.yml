@@ -256,7 +256,7 @@ services:
       - ORDERS_SERVICE_URL=orders:50052
       - RECEIPT_SERVICE_URL=receipt:50054
       - FX_SERVICE_URL=fx:50055
-      - GRPC_TIMEOUT_MS=2000
+      - GRPC_TIMEOUT_MS=10000
       - CORS_ORIGIN=*
     ports:
       - "3000:3000"

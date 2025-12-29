@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Inject, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, timeout, retry, catchError } from 'rxjs';
+import { firstValueFrom, timeout, retry, catchError, TimeoutError } from 'rxjs';
 import {
   CreateOrderDto,
   Zone,
@@ -312,6 +312,10 @@ export class GatewayService implements OnModuleInit {
   // }
 
   private mapGrpcError(error: any): HttpException {
+    if (error instanceof TimeoutError) {
+      return new HttpException({ statusCode: 504, message: 'Gateway Timeout', error: 'Gateway Timeout' }, HttpStatus.GATEWAY_TIMEOUT);
+    }
+
     const code = error?.code || error?.details?.code;
     const message = error?.message || error?.details?.message || 'Unknown error';
 
