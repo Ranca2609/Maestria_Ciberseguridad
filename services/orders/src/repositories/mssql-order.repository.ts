@@ -134,24 +134,127 @@ export class MssqlOrderRepository implements IOrderRepository {
   async findAll(): Promise<IOrder[]> {
     const pool = this.databaseService.getPool();
 
-    const ordersResult = await pool.request().query(`
-      SELECT * FROM orders ORDER BY created_at DESC
+    // Optimized: Use a single JOIN query instead of N+1 queries
+    const result = await pool.request().query(`
+      SELECT 
+        o.*,
+        p.id as pkg_id,
+        p.weight_kg,
+        p.height_cm,
+        p.width_cm,
+        p.length_cm,
+        p.fragile,
+        p.declared_value_q,
+        p.volumetric_weight
+      FROM orders o
+      LEFT JOIN packages p ON o.id = p.order_id
+      ORDER BY o.created_at DESC
     `);
 
+    // Group packages by order
+    const orderMap = new Map<string, { orderRow: any; packages: any[] }>();
+
+    for (const row of result.recordset) {
+      if (!orderMap.has(row.id)) {
+        orderMap.set(row.id, {
+          orderRow: row,
+          packages: [],
+        });
+      }
+
+      // Add package if it exists (LEFT JOIN may have null packages)
+      if (row.pkg_id) {
+        orderMap.get(row.id)!.packages.push({
+          id: row.pkg_id,
+          weight_kg: row.weight_kg,
+          height_cm: row.height_cm,
+          width_cm: row.width_cm,
+          length_cm: row.length_cm,
+          fragile: row.fragile,
+          declared_value_q: row.declared_value_q,
+          volumetric_weight: row.volumetric_weight,
+        });
+      }
+    }
+
+    // Convert to IOrder array
     const orders: IOrder[] = [];
-
-    for (const orderRow of ordersResult.recordset) {
-      const pkgRequest = new sql.Request(pool);
-      const pkgResult = await pkgRequest
-        .input('order_id', sql.NVarChar(36), orderRow.id)
-        .query(`
-          SELECT * FROM packages WHERE order_id = @order_id
-        `);
-
-      orders.push(this.rowToOrder(orderRow, pkgResult.recordset));
+    for (const { orderRow, packages } of orderMap.values()) {
+      orders.push(this.rowToOrder(orderRow, packages));
     }
 
     return orders;
+  }
+
+  /**
+   * Optimized list with database-level pagination
+   */
+  async listOrders(page: number, pageSize: number): Promise<{ orders: IOrder[]; totalCount: number }> {
+    const pool = this.databaseService.getPool();
+    const offset = (page - 1) * pageSize;
+
+    // Get total count
+    const countResult = await pool.request().query(`
+      SELECT COUNT(*) as total FROM orders
+    `);
+    const totalCount = countResult.recordset[0].total;
+
+    // Get paginated orders with packages in a single query
+    const result = await pool.request()
+      .input('pageSize', sql.Int, pageSize)
+      .input('offset', sql.Int, offset)
+      .query(`
+        SELECT 
+          o.*,
+          p.id as pkg_id,
+          p.weight_kg,
+          p.height_cm,
+          p.width_cm,
+          p.length_cm,
+          p.fragile,
+          p.declared_value_q,
+          p.volumetric_weight
+        FROM (
+          SELECT * FROM orders
+          ORDER BY created_at DESC
+          OFFSET @offset ROWS
+          FETCH NEXT @pageSize ROWS ONLY
+        ) o
+        LEFT JOIN packages p ON o.id = p.order_id
+        ORDER BY o.created_at DESC
+      `);
+
+    // Group packages by order
+    const orderMap = new Map<string, { orderRow: any; packages: any[] }>();
+
+    for (const row of result.recordset) {
+      if (!orderMap.has(row.id)) {
+        orderMap.set(row.id, {
+          orderRow: row,
+          packages: [],
+        });
+      }
+
+      if (row.pkg_id) {
+        orderMap.get(row.id)!.packages.push({
+          id: row.pkg_id,
+          weight_kg: row.weight_kg,
+          height_cm: row.height_cm,
+          width_cm: row.width_cm,
+          length_cm: row.length_cm,
+          fragile: row.fragile,
+          declared_value_q: row.declared_value_q,
+          volumetric_weight: row.volumetric_weight,
+        });
+      }
+    }
+
+    const orders: IOrder[] = [];
+    for (const { orderRow, packages } of orderMap.values()) {
+      orders.push(this.rowToOrder(orderRow, packages));
+    }
+
+    return { orders, totalCount };
   }
 
   async update(order: IOrder): Promise<IOrder> {

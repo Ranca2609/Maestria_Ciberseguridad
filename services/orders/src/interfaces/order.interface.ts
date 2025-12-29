@@ -147,6 +147,7 @@ export interface IOrderRepository {
   save(order: IOrder): Promise<IOrder> | IOrder;
   findById(orderId: string): Promise<IOrder | null> | IOrder | null;
   findAll(): Promise<IOrder[]> | IOrder[];
+  listOrders(page: number, pageSize: number): Promise<{ orders: IOrder[]; totalCount: number }> | { orders: IOrder[]; totalCount: number };
   update(order: IOrder): Promise<IOrder> | IOrder;
 }
 

@@ -89,8 +89,9 @@ export class GatewayService implements OnModuleInit {
   private ordersService: OrdersServiceClient;
   private receiptService: ReceiptServiceClient;
 
-  private readonly TIMEOUT_MS = parseInt(process.env.GRPC_TIMEOUT_MS || '2000');
+  private readonly TIMEOUT_MS = parseInt(process.env.GRPC_TIMEOUT_MS || '10000', 10);
   private readonly MAX_RETRIES = 2;
+  private readonly RETRY_DELAY = 500;
 
   constructor(
     @Inject('ORDERS_PACKAGE') private readonly ordersClient: ClientGrpc,

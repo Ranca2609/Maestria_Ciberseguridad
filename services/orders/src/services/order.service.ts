@@ -160,18 +160,13 @@ export class OrderService implements OnModuleInit {
   }
 
   async listOrders(request: IListOrdersRequest): Promise<IListOrdersResponse> {
-    const allOrders = await this.orderRepository.findAll();
     const page = request.page || 1;
     const pageSize = Math.min(request.pageSize || 20, 100);
 
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
+    // Use optimized repository method with database-level pagination
+    const { orders, totalCount } = await this.orderRepository.listOrders(page, pageSize);
 
-    const paginatedOrders = allOrders
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(startIndex, endIndex);
-
-    const orderSummaries: IOrderSummary[] = paginatedOrders.map(order => ({
+    const orderSummaries: IOrderSummary[] = orders.map(order => ({
       orderId: order.orderId,
       destinationZone: order.destinationZone,
       serviceType: order.serviceType,
@@ -182,7 +177,7 @@ export class OrderService implements OnModuleInit {
 
     return {
       orders: orderSummaries,
-      totalCount: allOrders.length,
+      totalCount,
       page,
       pageSize,
     };

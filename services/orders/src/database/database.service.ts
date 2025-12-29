@@ -36,10 +36,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         trustServerCertificate: true, // For self-signed certs
       },
       pool: {
-        max: 10,
-        min: 0,
+        max: 100, // Increased for high load
+        min: 10, // Keep minimum connections ready
         idleTimeoutMillis: 30000,
       },
+      requestTimeout: 15000, // 15 second query timeout
+      connectionTimeout: 15000, // 15 second connection timeout
     };
   }
 

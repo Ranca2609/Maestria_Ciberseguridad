@@ -27,6 +27,21 @@ export class InMemoryOrderRepository implements IOrderRepository {
     return order;
   }
 
+  listOrders(page: number, pageSize: number): { orders: IOrder[]; totalCount: number } {
+    const allOrders = Array.from(this.orders.values());
+    const totalCount = allOrders.length;
+    
+    const sorted = allOrders.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const orders = sorted.slice(startIndex, endIndex).map(order => ({ ...order }));
+    
+    return { orders, totalCount };
+  }
+
   // Método para limpiar (útil en tests)
   clear(): void {
     this.orders.clear();
